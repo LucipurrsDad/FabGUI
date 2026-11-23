@@ -66,9 +66,9 @@ def fabcli_env():
     env["FABCLI_LIBRARY_CACHE"] = "1"
     env["FABCLI_NO_TIPS"] = "1"
     env["FABCLI_NO_UPDATE_CHECK"] = "1"
-    local_lib_dir = str(Path.home() / ".local" / "lib")
-    existing_ld = env.get("LD_LIBRARY_PATH", "")
-    env["LD_LIBRARY_PATH"] = local_lib_dir + (":" + existing_ld if existing_ld else "")
+    # Do not prepend ~/.local/lib: it can shadow system shared libraries and
+    # make FabCLI load an incompatible runtime.
+    env.pop("LD_LIBRARY_PATH", None)
     return env
 
 
@@ -234,8 +234,6 @@ def cmd_download(body):
                 "message": f"cannot create download directory {output_dir}: {exc}",
                 "data": None, "code": 13}
 
-    # FabCLI accepts UID as a positional argument or --uid.  Use --uid only here
-    # to make the request unambiguous and keep it consistent with the API/UI.
     args = ["download", "--uid", uid, "--output", output_dir]
     engine = str(body.get("engine") or "").strip()
     platform = str(body.get("platform") or "").strip()
