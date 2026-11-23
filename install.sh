@@ -30,22 +30,19 @@ fi
 
 echo "==> FabGUI installer for $DISTRO"
 echo "==> Target: $FABGUI_DIR"
-
 mkdir -p "$FABGUI_DIR" "$SERVICE_DIR"
 
-# FabCLI's Linux WebView uses the distribution-provided runtime libraries.
-# Do not copy stale libraries from an old Arch package archive.
 echo "==> Installing FabCLI runtime packages"
 sudo pacman -S --needed webkit2gtk-4.1 harfbuzz-icu libmanette hyphen
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo "==> Installing FabGUI from $SCRIPT_DIR"
 install -m 755 "$SCRIPT_DIR/server.py" "$FABGUI_DIR/server.py"
-cp -a "$SCRIPT_DIR/static" "$FABGUI_DIR/"
+rm -rf "$FABGUI_DIR/static"
+cp -a "$SCRIPT_DIR/static" "$FABGUI_DIR/static"
 cp -a "$SCRIPT_DIR/settings.json" "$FABGUI_DIR/settings.json" 2>/dev/null || true
 cp -a "$SCRIPT_DIR/README.md" "$FABGUI_DIR/README.md" 2>/dev/null || true
 
-# Ensure systemd can find a user-installed FabCLI binary.
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=FabGUI - FabCLI Web Server
@@ -62,10 +59,9 @@ Environment=FABGUI_FABCLI=fabcli
 Environment=PATH=$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin
 
 [Install]
-WantedBy=default.service
+WantedBy=default.target
 EOF
 
-mkdir -p "$HOME/.local/bin"
 if [[ -f "$HOME/.bashrc" ]] && ! grep -Fq 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.bashrc"; then
   printf '\n# User-installed commands such as FabCLI\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$HOME/.bashrc"
 fi
