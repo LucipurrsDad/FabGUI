@@ -2,94 +2,110 @@
 
 A self-hosted web GUI for [FabCLI](https://github.com/zirklerite/FabCLI) — the Epic Games / Fab asset downloader for Linux.
 
-FabGUI wraps the `fabcli` binary behind a small local web server and gives you a browser UI for:
+FabGUI provides a browsable owned library with search, engine/category/format/platform filters, newest-engine and alphabetical sorting, card metadata, downloads, UID copying, and authentication status.
 
-- **Owned assets** — lists every asset you've claimed with FabCLI, sorted alphabetically, with thumbnails
-- **Download** — click any asset (picture or title) to open the download prompt into your configured folder
-- **Copy UID** — right-click any asset to copy its listing UID to the clipboard (toast confirms)
-- **Authentication** — sign in / out with Epic / Fab, view session status, expiry, and account info
-- **Settings** — configure the download folder (saved to `settings.json`, persists between restarts)
+## Platform support
 
-Everything runs on your machine via the local `fabcli` binary; no API keys or extra services needed.
+The included installer is for **Arch Linux, CachyOS, and other Arch-based distributions** using `pacman`. It does not support Debian, Ubuntu, Fedora, or other package families; on those distributions, install the equivalent WebKitGTK 4.1 and GTK runtime packages manually.
 
-## What changed from the original FabGUI
+## FabCLI dependencies on Arch
 
-- **Card layout** — assets display as cards (image + title) instead of a table, filling the full viewport width
-- **Click to download** — clicking a card opens the download modal
-- **Right-click to copy UID** — copies the listing UID with a centered toast confirmation
-- **Help button** — in the header next to the logo, explains how to use the site
-- **Removed** — top nav tabs, search bar, filters, "I've claimed it" checkbox, Library tab, Downloads tab, FabCLI binary field, Price/Owned columns, themes
+Install FabCLI first, then install its Linux runtime dependencies with:
 
-## Requirements
+```bash
+sudo pacman -S --needed webkit2gtk-4.1 harfbuzz-icu libmanette hyphen
+```
 
-- `fabcli` installed and on your `PATH` (see the [FabCLI README](https://github.com/zirklerite/FabCLI#readme))
-- Python 3.8+ (stdlib only — no `pip install` needed)
-- Shared libraries: `libwebkit2gtk-4.1.so.0`, `libjavascriptcoregtk-4.1.so.0`, `libharfbuzz-icu.so.0`, `libmanette-0.2.so.0`, `libhyphen.so.0`
-- A graphical environment for the Fab login webview
+If FabCLI is in `~/.local/bin`, put it on your shell and systemd user-service PATH:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+For Bash, persist that with:
+
+```bash
+grep -qxF 'export PATH="$HOME/.local/bin:$PATH"' ~/.bashrc || \
+  echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+Verify:
+
+```bash
+which fabcli
+fabcli --help
+ldd "$(which fabcli)" | grep "not found" && false || true
+```
 
 ## Install
 
-Run the included install script. It downloads the required shared-library packages from the Arch Linux archive, extracts them into `~/.local/lib/`, installs FabGUI, and sets up a systemd user service:
-
 ```bash
 git clone https://github.com/LucipurrsDad/FabGUI.git
-cd /home/$USER/FabGUI
+cd FabGUI
 chmod +x install.sh
 ./install.sh
 ```
 
-The script will:
+The installer:
 
-1. Create `~/.local/lib/` if it doesn't exist
-2. Download and extract `webkit2gtk`, `harfbuzz-icu`, `libmanette`, and `hyphen` packages
-3. Copy all `*.so` files into `~/.local/lib/`
-4. Install FabGUI files to `~/.local/share/fabgui/`
-5. Create and enable a systemd user service at `~/.config/systemd/user/fabgui.service`
-6. Start the service
+1. verifies that it is running on an Arch-based system;
+2. refuses to run as root;
+3. checks for FabCLI;
+4. installs FabCLI runtime libraries through `pacman`;
+5. copies FabGUI into `~/.local/share/fabgui`;
+6. creates `~/.config/systemd/user/fabgui.service`;
+7. enables and starts the service.
 
-Then open <http://127.0.0.1:8000> in your browser.
+Then open <http://127.0.0.1:8000>.
 
-### Manual install
-
-If you prefer not to use the script:
+## Updating an existing installation
 
 ```bash
-mkdir -p ~/.local/lib
-# Copy the required .so files into ~/.local/lib/
-cp server.py static/ settings.json ~/.local/share/fabgui/
-# Then run:
+cd /path/to/FabGUI
+git pull --ff-only
+./install.sh
+```
+
+For an immediate refresh of only the installed web files:
+
+```bash
+cp -r static server.py settings.json README.md ~/.local/share/fabgui/
+systemctl --user restart fabgui
+```
+
+Then hard-refresh the browser with **Ctrl+F5**.
+
+## Library filtering
+
+Filter options are generated from `fabcli library` in the user's installed library. Engine, category, format, platform, search, and sorting selections are remembered in browser local storage.
+
+`Latest engine` uses the highest engine version listed in `projectVersions`; it does not determine whether an item is a complete Unreal project. Categories and `distributionMethod` are Fab metadata and can be broad or change upstream.
+
+## Run manually
+
+```bash
 python3 ~/.local/share/fabgui/server.py
 ```
 
-## Run
-
-If using the systemd user service:
+Or manage the systemd user service:
 
 ```bash
 systemctl --user start fabgui
 systemctl --user enable fabgui
+systemctl --user restart fabgui
 systemctl --user status fabgui
+journalctl --user -u fabgui.service -n 100 --no-pager
 ```
-
-Then open <http://127.0.0.1:8000> in your browser.
-
-## Configuration
-
-Settings (download folder) are saved to `settings.json` and persist between restarts.
-
-Environment variables:
-
-- `FABGUI_PORT` — port to listen on (default `8000`)
-- `FABGUI_FABCLI` — path to the `fabcli` executable (default `fabcli`)
 
 ## Layout
 
-- `server.py` — stdlib HTTP server + subprocess wrapper around `fabcli`
-- `static/index.html` — the GUI page
-- `static/style.css` — styling
-- `static/app.js` — UI logic
-- `settings.json` — runtime settings (download folder)
-- `install.sh` — automated installer
+- `server.py` — Python HTTP server and FabCLI wrapper.
+- `static/index.html` — GUI page.
+- `static/style.css` — styling.
+- `static/app.js` — library UI and filtering.
+- `settings.json` — runtime settings.
+- `install.sh` — Arch/CachyOS installer.
 
 ## License
 

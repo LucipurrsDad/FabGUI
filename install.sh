@@ -1,59 +1,51 @@
 #!/usr/bin/env bash
-# FabGUI installer
-# Downloads required shared libraries from the Arch Linux archive,
-# installs FabGUI, and sets up a systemd user service.
+# FabGUI installer for Arch Linux, CachyOS, and other Arch-based systems.
 set -euo pipefail
 
-ARCH="x86_64"
-ARCHIVE="https://archive.archlinux.org"
 FABGUI_DIR="$HOME/.local/share/fabgui"
-LIB_DIR="$HOME/.local/lib"
 SERVICE_DIR="$HOME/.config/systemd/user"
 SERVICE_FILE="$SERVICE_DIR/fabgui.service"
 
-# Packages needed by fabcli (webkit2gtk frontend)
-declare -A PKGS=(
-  ["webkit2gtk"]="webkit2gtk/4.1-2.54.2-1/webkit2gtk-4.1-2.54.2-1-${ARCH}.pkg.tar.zst"
-  ["harfbuzz-icu"]="harfbuzz-icu/15.1.0-1/harfbuzz-icu-15.1.0-1-${ARCH}.pkg.tar.zst"
-  ["libmanette"]="libmanette/0.2.13-2/libmanette-0.2.13-2-${ARCH}.pkg.tar.zst"
-  ["hyphen"]="hyphen/2.8.9-1/hyphen-2.8.9-1-${ARCH}.pkg.tar.zst"
-)
+if ! command -v pacman >/dev/null 2>&1; then
+  echo "Error: FabGUI's installer currently supports Arch Linux and Arch-based distributions." >&2
+  echo "CachyOS users should run this installer from CachyOS; other distributions need matching packages for WebKitGTK 4.1." >&2
+  exit 1
+fi
 
-echo "==> FabGUI installer"
+if [[ -f /etc/cachyos-release ]]; then
+  DISTRO="CachyOS"
+else
+  DISTRO="Arch Linux / Arch-based"
+fi
+
+if [[ $EUID -eq 0 ]]; then
+  echo "Error: do not run this installer with sudo or as root." >&2
+  exit 1
+fi
+
+if ! command -v fabcli >/dev/null 2>&1 && [[ ! -x "$HOME/.local/bin/fabcli" ]]; then
+  echo "Warning: fabcli was not found on PATH or in $HOME/.local/bin." >&2
+  echo "Install FabCLI first, then rerun this installer."
+fi
+
+echo "==> FabGUI installer for $DISTRO"
 echo "==> Target: $FABGUI_DIR"
-echo "==> Libraries: $LIB_DIR"
-echo "==> Note: folder picker requires python3-tk (install with: sudo apt install python3-tk)"
 
-# --- create directories -------------------------------------------------
-mkdir -p "$FABGUI_DIR" "$LIB_DIR" "$SERVICE_DIR"
+mkdir -p "$FABGUI_DIR" "$SERVICE_DIR"
 
-# --- download and extract shared libraries ------------------------------
-WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+# FabCLI's Linux WebView uses the distribution-provided runtime libraries.
+# Do not copy stale libraries from an old Arch package archive.
+echo "==> Installing FabCLI runtime packages"
+sudo pacman -S --needed webkit2gtk-4.1 harfbuzz-icu libmanette hyphen
 
-for name in "${!PKGS[@]}"; do
-  url="${ARCHIVE}/packages/${PKGS[$name]}"
-  tarball="$WORK/${name}.pkg.tar.zst"
-  echo "==> Downloading $name ..."
-  curl -fL "$url" -o "$tarball"
-  echo "==> Extracting $name ..."
-  mkdir -p "$WORK/${name}-extract"
-  tar --zstd -xf "$tarball" -C "$WORK/${name}-extract"
-  echo "==> Copying *.so files from $name to $LIB_DIR ..."
-  find "$WORK/${name}-extract" -name '*.so*' -exec cp -v {} "$LIB_DIR/" \;
-done
-
-echo "==> Libraries installed to $LIB_DIR"
-
-# --- install FabGUI files ------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-echo "==> Installing FabGUI from $SCRIPT_DIR to $FABGUI_DIR ..."
-cp -v "$SCRIPT_DIR/server.py" "$FABGUI_DIR/"
-cp -rv "$SCRIPT_DIR/static" "$FABGUI_DIR/"
-cp -v "$SCRIPT_DIR/settings.json" "$FABGUI_DIR/" 2>/dev/null || true
-cp -v "$SCRIPT_DIR/README.md" "$FABGUI_DIR/" 2>/dev/null || true
+echo "==> Installing FabGUI from $SCRIPT_DIR"
+install -m 755 "$SCRIPT_DIR/server.py" "$FABGUI_DIR/server.py"
+cp -a "$SCRIPT_DIR/static" "$FABGUI_DIR/"
+cp -a "$SCRIPT_DIR/settings.json" "$FABGUI_DIR/settings.json" 2>/dev/null || true
+cp -a "$SCRIPT_DIR/README.md" "$FABGUI_DIR/README.md" 2>/dev/null || true
 
-# --- systemd user service -----------------------------------------------
+# Ensure systemd can find a user-installed FabCLI binary.
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=FabGUI - FabCLI Web Server
@@ -67,25 +59,21 @@ Restart=on-failure
 RestartSec=5
 Environment=FABGUI_PORT=8000
 Environment=FABGUI_FABCLI=fabcli
-Environment=PATH=$HOME/.local/bin:/usr/bin:/bin
-Environment=LD_LIBRARY_PATH=$LIB_DIR
+Environment=PATH=$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin
 
 [Install]
-WantedBy=default.target
+WantedBy=default.service
 EOF
 
-echo "==> Service file written to $SERVICE_FILE"
-
-# --- reload and start ----------------------------------------------------
-if command -v systemctl >/dev/null 2>&1; then
-  systemctl --user daemon-reload
-  systemctl --user enable fabgui.service
-  systemctl --user restart fabgui.service
-  echo "==> FabGUI service started. Open http://127.0.0.1:8000"
-else
-  echo "==> systemctl not found. Start manually:"
-  echo "    cd $FABGUI_DIR && python3 server.py"
-  echo "    Then open http://127.0.0.1:8000"
+mkdir -p "$HOME/.local/bin"
+if [[ -f "$HOME/.bashrc" ]] && ! grep -Fq 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.bashrc"; then
+  printf '\n# User-installed commands such as FabCLI\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$HOME/.bashrc"
 fi
 
-echo "==> Done."
+systemctl --user daemon-reload
+systemctl --user enable --now fabgui.service
+
+echo
+echo "==> FabGUI installed"
+echo "==> Open http://127.0.0.1:8000"
+echo "==> After a fresh shell login, verify: fabcli --help"
