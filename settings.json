@@ -1,4 +1,4 @@
 {
   "fabcli_path": "fabcli",
-  "download_dir": "/home/$USER"
+  "download_dir": "~/Downloads"
 }

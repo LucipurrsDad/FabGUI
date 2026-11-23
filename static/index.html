@@ -8,22 +8,14 @@
   <link rel="icon" href="/static/fab.jpeg">
   <link rel="manifest" href="/static/manifest.json">
   <style>
-    header.top {
-      position: sticky;
-      top: 0;
-      z-index: 20;
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-      align-items: center;
-    }
+    header.top { position: sticky; top: 0; z-index: 20; display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); align-items: center; }
     .header-sort-tabs { grid-column: 2; display: flex; justify-content: center; gap: 6px; padding: 2px; }
     .sort-tab { white-space: nowrap; border-radius: 999px; padding: 6px 12px; }
     .sort-tab[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
     .header-actions { grid-column: 3; justify-self: end; display: flex; align-items: center; gap: 10px; }
     .header-actions .save-location { margin-left: 0; }
-    .library-tools { position: sticky; top: 65px; z-index: 15; margin: -1px 0 14px; padding: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 6px 16px rgba(0,0,0,.24); }
+    .library-tools { position: sticky; top: 65px; z-index: 15; margin: -1px 0 14px; padding: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
     .library-tool-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-    .library-tool-row + .library-tool-row { margin-top: 9px; }
     .library-filters { display: flex; flex: 1; flex-wrap: wrap; gap: 8px; align-items: center; }
     .library-filters .input { min-width: 130px; max-width: 220px; padding: 7px 9px; }
     .library-search { flex: 1; min-width: 190px !important; max-width: 360px !important; }
@@ -34,75 +26,42 @@
     .download-options { display: grid; gap: 12px; margin-top: 16px; }
     .download-options label { display: grid; gap: 5px; color: var(--muted); font-size: 13px; }
     .download-options select { width: 100%; }
-    @media (max-width: 760px) {
-      header.top { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 10px 12px; }
-      .brand { grid-column: 1; grid-row: 1; }
-      .header-actions { grid-column: 2; grid-row: 1; gap: 6px; }
-      .header-actions .save-location { padding: 5px 9px; gap: 6px; }
-      .header-actions .save-path { max-width: 115px; }
-      .header-sort-tabs { grid-column: 1 / -1; grid-row: 2; }
-      .library-tools { top: 100px; padding: 9px; }
-      .library-filters { width: 100%; }
-      .library-filters .input, .library-search { flex: 1 1 145px; min-width: 0 !important; max-width: none !important; }
-    }
-    @media (max-width: 430px) {
-      .header-actions .save-label { display: none; }
-      .header-actions .save-path { max-width: 105px; }
-      .header-sort-tabs .sort-tab { padding: 5px 10px; font-size: 12px; }
-    }
   </style>
 </head>
 <body>
-  <div id="root-app">
-    <header class="top">
-      <div class="brand"><img src="/static/fab.jpeg" class="brand-img" alt="">Fab<em>GUI</em></div>
-      <nav class="header-sort-tabs" role="group" aria-label="Sort owned library">
-        <button class="btn sort-tab" data-sort="latest" aria-pressed="true">Latest engine</button>
-        <button class="btn sort-tab" data-sort="title" aria-pressed="false">A–Z</button>
-      </nav>
-      <div class="header-actions">
-        <div class="save-location"><span class="save-label">Save to</span><span id="saveLocationText" class="save-path">~/Downloads</span></div>
-        <button id="btnHelp" class="btn ghost">Help</button>
+  <header class="top">
+    <div class="brand"><img src="/static/fab.jpeg" class="brand-img" alt="">Fab<em>GUI</em></div>
+    <nav class="header-sort-tabs" role="group" aria-label="Sort owned library">
+      <button class="btn sort-tab" data-sort="latest" aria-pressed="true">Latest engine</button>
+      <button class="btn sort-tab" data-sort="title" aria-pressed="false">A-Z</button>
+    </nav>
+    <div class="header-actions">
+      <div class="save-location"><span class="save-label">Save to</span><span id="saveLocationText" class="save-path">~/Downloads</span></div>
+      <button id="btnHelp" class="btn ghost">Help</button>
+    </div>
+  </header>
+  <main>
+    <section id="tab-search" class="tab-panel active">
+      <div class="panel">
+        <div class="library-tools" aria-label="Library search and filters">
+          <div class="library-tool-row library-filters">
+            <input id="librarySearch" class="input library-search" type="search" placeholder="Search titles, categories…" aria-label="Search owned assets">
+            <select id="engineFilter" class="input" aria-label="Filter by Unreal Engine version"><option value="">All engines</option></select>
+            <select id="categoryFilter" class="input" aria-label="Filter by Fab category"><option value="">All categories</option></select>
+            <select id="formatFilter" class="input" aria-label="Filter by distribution format"><option value="">All formats</option></select>
+            <select id="platformFilter" class="input" aria-label="Filter by target platform"><option value="">All platforms</option></select>
+            <button id="clearFilters" class="btn small" type="button">Clear</button>
+          </div>
+        </div>
+        <div class="results-head"><h3>Owned library <span id="resultCount" class="muted"></span></h3></div>
+        <div id="resultsWrap">
+          <div id="resultsEmpty" class="placeholder">No assets match these filters.</div>
+          <div id="resultsLoading" class="placeholder hidden"><span class="spinner"></span>Loading…</div>
+          <div id="resultsGrid" class="hidden results-grid"></div>
+        </div>
       </div>
-    </header>
-
-    <main>
-      <section id="tab-search" class="tab-panel active">
-        <div class="panel">
-          <div class="library-tools" aria-label="Library search and filters">
-            <div class="library-tool-row library-filters">
-              <input id="librarySearch" class="input library-search" type="search" placeholder="Search titles, categories…" aria-label="Search owned assets">
-              <select id="engineFilter" class="input" aria-label="Filter by Unreal Engine version"><option value="">All engines</option></select>
-              <select id="categoryFilter" class="input" aria-label="Filter by Fab category"><option value="">All categories</option></select>
-              <select id="formatFilter" class="input" aria-label="Filter by distribution format"><option value="">All formats</option></select>
-              <select id="platformFilter" class="input" aria-label="Filter by target platform"><option value="">All platforms</option></select>
-              <button id="clearFilters" class="btn small" type="button">Clear</button>
-            </div>
-          </div>
-          <div class="results-head"><h3>Owned library <span id="resultCount" class="muted"></span></h3></div>
-          <div id="resultsWrap">
-            <div id="resultsEmpty" class="placeholder">No assets match these filters.</div>
-            <div id="resultsLoading" class="placeholder hidden"><span class="spinner"></span>Loading…</div>
-            <div id="resultsGrid" class="hidden results-grid"></div>
-          </div>
-        </div>
-      </section>
-
-      <section id="tab-auth" class="tab-panel">
-        <div class="panel">
-          <h2>Authentication</h2>
-          <p>Status: <strong id="authStatusText">—</strong></p>
-          <div class="auth-grid">
-            <div class="auth-card"><h4>Epic session</h4><div class="kv"><span class="k">Authenticated</span><span id="authEpicState">—</span></div><div class="kv"><span class="k">Expires</span><span id="authEpicExpires">—</span></div></div>
-            <div class="auth-card"><h4>Fab session</h4><div class="kv"><span class="k">Status</span><span id="fabSessionState">—</span></div><div class="kv"><span class="k">Days remaining</span><span id="fabSessionDays">—</span></div></div>
-            <div class="auth-card"><h4>Account</h4><div class="kv"><span class="k">Display name</span><span id="whoDisplayName">—</span></div><div class="kv"><span class="k">Email</span><span id="whoEmail">—</span></div></div>
-          </div>
-          <div class="auth-actions"><button id="btnLogin" class="btn primary">Sign in with Epic / Fab</button><button id="btnLogout" class="btn danger">Sign out</button></div>
-        </div>
-      </section>
-    </main>
-    <footer></footer>
-  </div>
+    </section>
+  </main>
 
   <div id="engineModal" class="modal hidden">
     <div class="modal-card">
@@ -112,7 +71,10 @@
         <label>Unreal Engine version<select id="engineSelect" class="input"></select></label>
         <label>Target platform<select id="downloadPlatformSelect" class="input"></select></label>
       </div>
-      <div class="modal-actions"><button id="engineModalCancel" class="btn ghost">Cancel</button><button id="engineModalConfirm" class="btn primary">Download</button></div>
+      <div class="modal-actions">
+        <button id="engineModalCancel" class="btn ghost">Cancel</button>
+        <button id="engineModalConfirm" class="btn primary">Download</button>
+      </div>
     </div>
   </div>
 
@@ -120,10 +82,10 @@
     <div class="modal-card">
       <h3>How to use FabGUI</h3>
       <ul class="help-list">
-        <li>Use the centered tabs to sort by newest supported engine version or alphabetically.</li>
-        <li>Search and filter the owned library by engine, category, distribution format, or target platform.</li>
-        <li>Downloads use the Fab listing UID and offer only engine versions listed for that asset.</li>
-        <li>Click a card to download; right-click to copy its listing UID.</li>
+        <li>Filter by the engine version supported by each asset.</li>
+        <li>Card download options only list platforms compatible with the selected engine.</li>
+        <li>Downloads use the Fab listing UID.</li>
+        <li>Right-click a card to copy its listing UID.</li>
       </ul>
       <div class="modal-actions"><button id="helpModalClose" class="btn primary">Got it</button></div>
     </div>
