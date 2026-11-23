@@ -7,6 +7,30 @@
   <link rel="stylesheet" href="/static/style.css">
   <link rel="icon" href="/static/fab.jpeg">
   <link rel="manifest" href="/static/manifest.json">
+  <style>
+    header.top { position: sticky; top: 0; z-index: 20; }
+    .library-tools { position: sticky; top: 65px; z-index: 15; margin: -1px 0 14px; padding: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 6px 16px rgba(0,0,0,.24); }
+    .library-tool-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .library-tool-row + .library-tool-row { margin-top: 9px; }
+    .library-tool-label { color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+    .sort-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 2px; }
+    .sort-tab { white-space: nowrap; border-radius: 999px; padding: 6px 12px; }
+    .sort-tab[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .library-filters { display: flex; flex: 1; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .library-filters .input { min-width: 130px; max-width: 220px; padding: 7px 9px; }
+    .library-search { flex: 1; min-width: 190px !important; max-width: 360px !important; }
+    .asset-card-meta { display: flex; flex-wrap: wrap; gap: 5px; }
+    .asset-meta-chip { display: inline-block; max-width: 100%; padding: 2px 7px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-size: 10px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .asset-meta-chip.engine { color: var(--blue); border-color: rgba(88,166,255,.35); }
+    .asset-meta-chip.category { color: var(--text); }
+    @media (max-width: 700px) {
+      main { padding: 12px 10px 28px; }
+      .library-tools { top: 58px; padding: 9px; }
+      .library-filters { width: 100%; }
+      .library-filters .input, .library-search { flex: 1 1 145px; min-width: 0 !important; max-width: none !important; }
+      .sort-tabs { width: 100%; }
+    }
+  </style>
 </head>
 <body>
   <div id="root-app">
@@ -22,12 +46,29 @@
     <main>
       <section id="tab-search" class="tab-panel active">
         <div class="panel">
-          <div class="results-head">
-            <h3>Results <span id="resultCount" class="muted"></span></h3>
+          <div class="library-tools" aria-label="Library sorting and filters">
+            <div class="library-tool-row">
+              <span class="library-tool-label">Sort</span>
+              <div class="sort-tabs" role="group" aria-label="Sort owned assets">
+                <button class="btn sort-tab" data-sort="latest" aria-pressed="true">Latest engine</button>
+                <button class="btn sort-tab" data-sort="title" aria-pressed="false">A–Z</button>
+              </div>
+            </div>
+            <div class="library-tool-row library-filters">
+              <input id="librarySearch" class="input library-search" type="search" placeholder="Search titles, categories…" aria-label="Search owned assets">
+              <select id="engineFilter" class="input" aria-label="Filter by Unreal Engine version"><option value="">All engines</option></select>
+              <select id="categoryFilter" class="input" aria-label="Filter by Fab category"><option value="">All categories</option></select>
+              <select id="formatFilter" class="input" aria-label="Filter by distribution format"><option value="">All formats</option></select>
+              <select id="platformFilter" class="input" aria-label="Filter by target platform"><option value="">All platforms</option></select>
+              <button id="clearFilters" class="btn small" type="button">Clear</button>
+            </div>
           </div>
 
+          <div class="results-head">
+            <h3>Owned library <span id="resultCount" class="muted"></span></h3>
+          </div>
           <div id="resultsWrap">
-            <div id="resultsEmpty" class="placeholder">No assets yet.</div>
+            <div id="resultsEmpty" class="placeholder">No assets match these filters.</div>
             <div id="resultsLoading" class="placeholder hidden"><span class="spinner"></span>Loading…</div>
             <div id="resultsGrid" class="hidden results-grid"></div>
           </div>
@@ -85,11 +126,12 @@
     <div class="modal-card">
       <h3>How to use FabGUI</h3>
       <ul class="help-list">
-        <li><strong>Click an asset</strong> (picture or title) to open the download prompt.</li>
-        <li><strong>Right-click an asset</strong> to copy its listing UID to the clipboard.</li>
-        <li><strong>Downloads are stored in ~/Downloads/content</li>
-        <li><strong>Authentication</strong> handles signing in/out with Epic / Fab through FabCLI itself.</li>
-        <li>This GUI lists your <strong>claimed (owned) Fab assets</strong>, sorted alphabetically. 5.8 is listed first for convenience.</li>
+        <li>Click a card to open the download prompt; right-click to copy its listing UID.</li>
+        <li>Use the pinned sort tabs and filters to browse the owned library by engine, category, format, or platform.</li>
+        <li>Categories and filter counts come from the items in your Fab library response.</li>
+        <li>Latest engine sorts by each item's highest listed Unreal Engine version; it does not claim that every listing is a project.</li>
+        <li>Downloads are stored in the configured FabCLI output folder.</li>
+        <li>Authentication is handled through FabCLI.</li>
       </ul>
       <div class="modal-actions">
         <button id="helpModalClose" class="btn primary">Got it</button>
@@ -98,7 +140,6 @@
   </div>
 
   <div id="toast" class="toast"></div>
-
   <script src="/static/app.js"></script>
 </body>
 </html>

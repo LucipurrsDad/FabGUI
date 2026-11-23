@@ -1,11 +1,27 @@
 "use strict";
 
+const FILTER_STORAGE_KEY = "fabgui.libraryView.v1";
 const state = {
   results: [],
   pending: null,
+  filters: loadSavedFilters(),
 };
 
 const $ = (s) => document.querySelector(s);
+
+function loadSavedFilters() {
+  const defaults = { query: "", engine: "", category: "", format: "", platform: "", sort: "latest" };
+  try {
+    const saved = JSON.parse(localStorage.getItem(FILTER_STORAGE_KEY) || "{}");
+    return { ...defaults, ...saved };
+  } catch (e) {
+    return defaults;
+  }
+}
+
+function saveFilters() {
+  try { localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(state.filters)); } catch (e) {}
+}
 
 /* ---------------------------------------------------------------- api */
 
@@ -27,11 +43,11 @@ async function api(path, opts = {}) {
 
 function esc(s) {
   return String(s == null ? "" : s)
-  .replace(/&/g, "&amp;")
-  .replace(/</g, "&lt;")
-  .replace(/>/g, "&gt;")
-  .replace(/"/g, "&quot;")
-  .replace(/'/g, "&#39;");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function fmtBytes(n) {
@@ -46,22 +62,11 @@ function fmtBytes(n) {
 
 function slugify(s) {
   const slug = String(s || "asset")
-  .toLowerCase()
-  .trim()
-  .replace(/[^a-z-0-9]+/g, "-")
-  .replace(/^-+|-+$/g, "");
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z-0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
   return slug || "asset";
-}
-
-function priceInfo(r) {
-  const sp = r.startingPrice || r.starting_price || null;
-  const price = Number(sp && sp.price != null ? sp.price : 0) || 0;
-  const disc = Number(sp && sp.discountedPrice != null ? sp.discountedPrice : 0) || 0;
-  const currency = (sp && sp.currencyCode) || (sp && sp.currency_code) || "USD";
-  const free = r.isFree === true || price === 0 || disc === 0;
-  const effective = free ? 0 : (disc || price);
-  const label = free ? "Free" : `${currency} ${effective.toFixed(2)}`;
-  return { free, label };
 }
 
 function toast(msg, kind, anchorEl) {
@@ -73,10 +78,8 @@ function toast(msg, kind, anchorEl) {
   t.style.display = "";
   t.style.transform = "";
   t.style.transition = "";
-
   if (anchorEl) {
     const rect = anchorEl.getBoundingClientRect();
-    // Force layout so offsetWidth/Height are current
     void t.offsetWidth;
     t.style.position = "fixed";
     t.style.left = (rect.left + rect.width / 2 - t.offsetWidth / 2) + "px";
@@ -88,11 +91,67 @@ function toast(msg, kind, anchorEl) {
     t.style.top = "auto";
     t.style.transform = "translateX(-50%)";
   }
-
   clearTimeout(toast._timer);
-  if (kind !== "error") {
-    toast._timer = setTimeout(() => { t.classList.remove("show"); }, 5000);
+  if (kind !== "error") toast._timer = setTimeout(() => t.classList.remove("show"), 5000);
+}
+
+function categoryNames(r) {
+  const value = r.categories || r.category || [];
+  const list = Array.isArray(value) ? value : [value];
+  return [...new Set(list.map((item) => {
+    if (typeof item === "string") return item.trim();
+    return String((item && (item.name || item.title || item.label)) || "").trim();
+  }).filter(Boolean))];
+}
+
+function distributionMethod(r) {
+  return String(r.distributionMethod || r.distribution_method || "").trim();
+}
+
+function formatLabel(value) {
+  return String(value || "Unknown").replace(/[_-]+/g, " ").toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function compareVersions(a, b) {
+  const partsA = String(a).match(/\d+/g) || [];
+  const partsB = String(b).match(/\d+/g) || [];
+  const length = Math.max(partsA.length, partsB.length);
+  for (let i = 0; i < length; i++) {
+    const diff = (Number(partsA[i]) || 0) - (Number(partsB[i]) || 0);
+    if (diff) return diff;
   }
+  return String(a).localeCompare(String(b));
+}
+
+function getAssetEngines(r) {
+  const engines = new Set();
+  (r.projectVersions || []).forEach((pv) => {
+    (pv.engineVersions || pv.engine_versions || []).forEach((engine) => {
+      if (engine) engines.add(String(engine));
+    });
+  });
+  return [...engines].sort(compareVersions).reverse();
+}
+
+function latestEngine(r) {
+  return getAssetEngines(r)[0] || "";
+}
+
+function getEngineForAsset(r) {
+  const engine = latestEngine(r);
+  if (engine) return engine;
+  return "UE_5.8";
+}
+
+function isUE58Compatible(r) {
+  return getAssetEngines(r).includes("UE_5.8");
+}
+
+function plainText(value) {
+  const el = document.createElement("div");
+  el.innerHTML = String(value || "");
+  return (el.textContent || el.innerText || "").replace(/\s+/g, " ").trim();
 }
 
 /* ---------------------------------------------------------------- jobs */
@@ -123,16 +182,10 @@ function watchJob(jid, onSuccess, onError) {
         return;
       }
       timer = setTimeout(tick, 2000);
-    } catch (e) {
-      timer = setTimeout(tick, 3000);
-    }
+    } catch (e) { timer = setTimeout(tick, 3000); }
   };
   timer = setTimeout(tick, 1200);
-  jobWatchers[jid] = () => {
-    alive = false;
-    clearTimeout(timer);
-    closeEventSource(jid);
-  };
+  jobWatchers[jid] = () => { alive = false; clearTimeout(timer); closeEventSource(jid); };
 }
 
 function closeEventSource(jid) {
@@ -147,54 +200,79 @@ function openEventSource(jid, onProgress) {
   const es = new EventSource(`/api/jobs/${jid}/progress`);
   jobEventSources[jid] = es;
   es.onmessage = (ev) => {
-    try {
-      const data = JSON.parse(ev.data);
-      if (onProgress) onProgress(data);
-    } catch (e) {}
+    try { const data = JSON.parse(ev.data); if (onProgress) onProgress(data); } catch (e) {}
   };
-  es.onerror = () => {
-    // EventSource will auto-reconnect; do nothing
-  };
+  es.onerror = () => {};
 }
 
-function getAssetEngines(r) {
-  const engines = new Set();
-  const versions = r.projectVersions || [];
-  versions.forEach((pv) => {
-    (pv.engineVersions || []).forEach((e) => engines.add(e));
-    (pv.buildVersions || []).forEach((b) => { if (b && b.build_version) engines.add(b.build_version); });
+/* ---------------------------------------------------------------- library filters and results */
+
+function populateSelect(selector, values, selected, allLabel, labelFn = (v) => v) {
+  const select = $(selector);
+  const counts = new Map();
+  state.results.forEach((item) => values(item).forEach((value) => counts.set(value, (counts.get(value) || 0) + 1)));
+  const unique = [...counts.keys()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  select.innerHTML = `<option value="">${esc(allLabel)} (${state.results.length})</option>` + unique.map((value) =>
+    `<option value="${esc(value)}">${esc(labelFn(value))} (${counts.get(value)})</option>`
+  ).join("");
+  select.value = unique.includes(selected) ? selected : "";
+}
+
+function setupFilters() {
+  const engines = [...new Set(state.results.flatMap(getAssetEngines))].sort(compareVersions).reverse();
+  populateSelect("#engineFilter", (r) => getAssetEngines(r), state.filters.engine, "All engines");
+  populateSelect("#categoryFilter", (r) => categoryNames(r), state.filters.category, "All categories");
+  populateSelect("#formatFilter", (r) => distributionMethod(r) ? [distributionMethod(r)] : [], state.filters.format, "All formats", formatLabel);
+  populateSelect("#platformFilter", (r) => [...new Set((r.projectVersions || []).flatMap((pv) => pv.targetPlatforms || pv.target_platforms || []))], state.filters.platform, "All platforms");
+  // Preserve the returned ordering by version rather than alphabetic ordering.
+  const engineSelect = $("#engineFilter");
+  engineSelect.innerHTML = `<option value="">All engines (${state.results.length})</option>` + engines.map((engine) => {
+    const count = state.results.filter((r) => getAssetEngines(r).includes(engine)).length;
+    return `<option value="${esc(engine)}">${esc(engine)} (${count})</option>`;
+  }).join("");
+  if (engines.includes(state.filters.engine)) engineSelect.value = state.filters.engine;
+  else state.filters.engine = "";
+
+  $("#librarySearch").value = state.filters.query;
+  document.querySelectorAll("[data-sort]").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.sort === state.filters.sort));
   });
-  return engines;
+  saveFilters();
 }
 
-function getEngineForAsset(r) {
-  const engines = getAssetEngines(r);
-  if (engines.has("UE_5.8")) return "UE_5.8";
-  if (engines.has("UE_5.7")) {
-    toast("Defaulted to UE 5.7 for " + (r.title || "asset") + " - check engines", "info");
-    return "UE_5.7";
-  }
-  return "UE_5.8";
+function filteredResults() {
+  const query = state.filters.query.trim().toLocaleLowerCase();
+  return state.results.filter((r) => {
+    const categories = categoryNames(r);
+    const engines = getAssetEngines(r);
+    const platforms = [...new Set((r.projectVersions || []).flatMap((pv) => pv.targetPlatforms || pv.target_platforms || []))];
+    if (state.filters.engine && !engines.includes(state.filters.engine)) return false;
+    if (state.filters.category && !categories.includes(state.filters.category)) return false;
+    if (state.filters.format && distributionMethod(r) !== state.filters.format) return false;
+    if (state.filters.platform && !platforms.includes(state.filters.platform)) return false;
+    if (query) {
+      const haystack = [r.title, r.id, distributionMethod(r), categories.join(" "), plainText(r.description)].join(" ").toLocaleLowerCase();
+      if (!haystack.includes(query)) return false;
+    }
+    return true;
+  }).sort((a, b) => {
+    if (state.filters.sort === "title") {
+      return String(a.title || "").localeCompare(String(b.title || ""), undefined, { sensitivity: "base" });
+    }
+    const engineDiff = compareVersions(latestEngine(b) || "0", latestEngine(a) || "0");
+    if (engineDiff) return engineDiff;
+    return String(a.title || "").localeCompare(String(b.title || ""), undefined, { sensitivity: "base" });
+  });
 }
-
-function isUE58Compatible(r) {
-  return getAssetEngines(r).has("UE_5.8");
-}
-
-/* ---------------------------------------------------------------- results (claimed library) */
 
 async function loadLibrary() {
   $("#resultsLoading").classList.remove("hidden");
+  $("#resultsEmpty").classList.add("hidden");
   try {
     const j = await api("/api/library");
     state.results = (j.data && j.data.results) || [];
     state.results.forEach((r) => { r.owned = true; });
-    state.results.sort((a, b) => {
-      const a58 = isUE58Compatible(a) ? 0 : 1;
-      const b58 = isUE58Compatible(b) ? 0 : 1;
-      if (a58 !== b58) return a58 - b58;
-      return String(a.title || "").toLowerCase().localeCompare(String(b.title || "").toLowerCase());
-    });
+    setupFilters();
     renderResults();
   } catch (e) {
     toast("Failed to load library: " + e.message, "error");
@@ -207,28 +285,22 @@ function renderResults() {
   const wrap = $("#resultsGrid");
   const empty = $("#resultsEmpty");
   const loading = $("#resultsLoading");
-  if (!state.results.length) { wrap.classList.add("hidden"); empty.classList.remove("hidden"); return; }
+  const rows = filteredResults();
+  $("#resultCount").textContent = `${rows.length} of ${state.results.length} item(s)`;
+  if (!rows.length) {
+    wrap.classList.add("hidden");
+    empty.textContent = state.results.length ? "No items match these filters. Try clearing one or more filters." : "Your owned library is empty.";
+    empty.classList.remove("hidden");
+    return;
+  }
   empty.classList.add("hidden");
   if (!loading.classList.contains("hidden")) loading.classList.add("hidden");
   wrap.classList.remove("hidden");
-
-  // Build HTML with separator between 5.8 and non-5.8 assets
-  let html = "";
-  let separatorAdded = false;
-  state.results.forEach((r) => {
-    const is58 = isUE58Compatible(r);
-    if (!separatorAdded && !is58) {
-      html += `<div class="asset-separator">Other engines (click to download, toast shows engine used)</div>`;
-      separatorAdded = true;
-    }
-    html += rowHtml(r);
-  });
-  wrap.innerHTML = html;
-  $("#resultCount").textContent = state.results.length ? `${state.results.length} result(s)` : "";
+  wrap.innerHTML = rows.map(rowHtml).join("");
 }
 
 function libraryUid(r) {
-  const ca = r.customAttributes || [];
+  const ca = r.customAttributes || r.custom_attributes || [];
   const list = Array.isArray(ca) ? ca : [ca];
   for (const a of list) {
     const v = a && (a.ListingIdentifier || a.listingIdentifier);
@@ -238,13 +310,13 @@ function libraryUid(r) {
 }
 
 function assetImage(r) {
-  for (const key of ['thumbnail', 'thumbnailUrl', 'thumbnail_url', 'coverImage', 'cover_image', 'image', 'icon', 'previewImage', 'preview_image', 'bannerImage', 'posterImage']) {
+  for (const key of ["thumbnail", "thumbnailUrl", "thumbnail_url", "coverImage", "cover_image", "image", "icon", "previewImage", "preview_image", "bannerImage", "posterImage"]) {
     if (r[key]) return r[key];
   }
   const media = r.media || r.assets || r.images || r.screenshots;
   if (Array.isArray(media) && media.length) {
     const first = media[0];
-    if (typeof first === 'string') return first;
+    if (typeof first === "string") return first;
     if (first && (first.url || first.thumbnail || first.image)) return first.url || first.thumbnail || first.image;
   }
   return null;
@@ -254,15 +326,23 @@ function rowHtml(r) {
   const uid = r.uid || r.listing_uid || r.id || libraryUid(r) || "";
   const title = r.title || "Untitled";
   const img = assetImage(r);
+  const categories = categoryNames(r).slice(0, 2);
+  const engine = latestEngine(r);
+  const method = distributionMethod(r);
   const imgCell = img
     ? `<img src="${esc(img)}" class="asset-card-img" alt="${esc(title)}" loading="lazy">`
     : `<div class="asset-card-placeholder">–</div>`;
-  return `
-  <div class="asset-card" data-uid="${esc(uid)}" data-title="${esc(title)}">
-  ${imgCell}
-  <div class="asset-card-body">
-  <div class="asset-card-title">${esc(title)}</div>
-  </div>
+  const chips = [
+    engine ? `<span class="asset-meta-chip engine">${esc(engine.replace("UE_", "UE "))}</span>` : "",
+    ...categories.map((category) => `<span class="asset-meta-chip category" title="${esc(category)}">${esc(category)}</span>`),
+    method ? `<span class="asset-meta-chip">${esc(formatLabel(method))}</span>` : "",
+  ].filter(Boolean).join("");
+  return `<div class="asset-card" data-uid="${esc(uid)}" data-title="${esc(title)}">
+    ${imgCell}
+    <div class="asset-card-body">
+      <div class="asset-card-title" title="${esc(title)}">${esc(title)}</div>
+      ${chips ? `<div class="asset-card-meta">${chips}</div>` : ""}
+    </div>
   </div>`;
 }
 
@@ -279,75 +359,37 @@ async function openDownloadModal(uid, title) {
 async function confirmDownload() {
   const p = state.pending;
   if (!p) return;
-
   const asset = state.results.find((r) => (r.uid || r.listing_uid || r.id || libraryUid(r)) === p.uid);
   const engine = asset ? getEngineForAsset(asset) : "UE_5.8";
-
-  const body = {
-    uid: p.uid,
-    output_dir: "/home/deck/Downloads",
-    engine: engine,
-    platform: "Windows",
-    jobs: 8,
-  };
-
-  const j = await api("/api/download", { method: "POST", body: body });
-
+  const body = { uid: p.uid, output_dir: "/home/deck/Downloads", engine, platform: "Windows", jobs: 8 };
+  const j = await api("/api/download", { method: "POST", body });
   $("#engineModal").classList.add("hidden");
   state.pending = null;
-
-  if (!j.ok) {
-    toast("Download failed: " + (j.message || "unknown"), "error");
-    return;
-  }
-
+  if (!j.ok) { toast("Download failed: " + (j.message || "unknown"), "error"); return; }
   toast("Download started…", "info");
-
   const jid = j.job_id;
-  if (!jid) {
-    toast("No job ID returned", "error");
-    return;
-  }
-
-  openEventSource(jid, (progress) => {
-    updateJobProgress(jid, progress);
-  });
-
+  if (!jid) { toast("No job ID returned", "error"); return; }
+  openEventSource(jid, (progress) => updateJobProgress(jid, progress));
   watchJob(jid, async (res) => {
-    if (res.ok) {
-      toast(`Download complete: ${res.data.files} files, ${fmtBytes(res.data.total_bytes)}`, "success");
-    } else {
-      toast("Download failed: " + (res.message || "unknown"), "error");
-    }
-  }, async (err) => {
-    toast("Download failed: " + (err.message || "unknown"), "error");
-  });
+    if (res.ok) toast(`Download complete: ${res.data.files} files, ${fmtBytes(res.data.total_bytes)}`, "success");
+    else toast("Download failed: " + (res.message || "unknown"), "error");
+  }, async (err) => toast("Download failed: " + (err.message || "unknown"), "error"));
 }
 
 function updateJobProgress(jid, progress) {
   const body = $("#jobsBody");
   if (!body) return;
-  const rows = body.querySelectorAll("tr");
-  for (const row of rows) {
+  for (const row of body.querySelectorAll("tr")) {
     const cells = row.querySelectorAll("td");
-    if (cells.length < 2) continue;
-    if (cells[0].textContent === jid) {
-      const pct = progress.percent != null ? Math.round(progress.percent) : null;
-      const dlRate = progress.download_speed ? fmtBytes(progress.download_speed) + "/s" : "";
-      const downloaded = progress.downloaded_bytes != null ? fmtBytes(progress.downloaded_bytes) : "";
-      const total = progress.total_bytes != null ? fmtBytes(progress.total_bytes) : "";
-      const detailCell = cells[5];
-
-      let barHtml = "";
-      if (pct != null) {
-        barHtml = `<div style="width:100%;background:#2a2a2a;border-radius:4px;overflow:hidden;margin-top:4px;">
-        <div style="width:${pct}%;height:6px;background:#4a9eff;transition:width 0.3s;"></div>
-        </div>
-        <span style="font-size:0.8em;color:#aaa;">${pct}% — ${downloaded}${total ? ' / ' + total : ''}${dlRate ? ' (' + dlRate + ')' : ''}</span>`;
-      }
-      detailCell.innerHTML = barHtml;
-      break;
+    if (cells.length < 2 || cells[0].textContent !== jid) continue;
+    const pct = progress.percent != null ? Math.round(progress.percent) : null;
+    const dlRate = progress.download_speed ? fmtBytes(progress.download_speed) + "/s" : "";
+    const downloaded = progress.downloaded_bytes != null ? fmtBytes(progress.downloaded_bytes) : "";
+    const total = progress.total_bytes != null ? fmtBytes(progress.total_bytes) : "";
+    if (pct != null) {
+      cells[5].innerHTML = `<div style="width:100%;background:#2a2a2a;border-radius:4px;overflow:hidden;margin-top:4px;"><div style="width:${pct}%;height:6px;background:#4a9eff;transition:width 0.3s;"></div></div><span style="font-size:0.8em;color:#aaa;">${pct}% — ${downloaded}${total ? " / " + total : ""}${dlRate ? " (" + dlRate + ")" : ""}</span>`;
     }
+    break;
   }
 }
 
@@ -359,9 +401,7 @@ async function copyUid(uid, anchorEl) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
       await navigator.clipboard.writeText(uid);
       ok = true;
-    } else {
-      throw new Error("clipboard api unavailable");
-    }
+    } else throw new Error("clipboard api unavailable");
   } catch (e) {
     try {
       const ta = document.createElement("textarea");
@@ -375,22 +415,19 @@ async function copyUid(uid, anchorEl) {
       ta.setSelectionRange(0, 99999);
       ok = document.execCommand("copy");
       document.body.removeChild(ta);
-    } catch (e2) {
-      ok = false;
-    }
+    } catch (e2) { ok = false; }
   }
-  if (ok) {
-    toast("UID copied to clipboard", "success", anchorEl);
-  } else {
-    toast("Failed to copy UID", "error", anchorEl);
-  }
+  toast(ok ? "UID copied to clipboard" : "Failed to copy UID", ok ? "success" : "error", anchorEl);
 }
 
 /* ---------------------------------------------------------------- auth */
 
 async function refreshAuthTab() {
   const d = await api("/api/auth/status");
-  if (!d || !d.ok) { $("#authStatusText").textContent = "Status unavailable: " + (d && d.message ? d.message : "unknown error"); return; }
+  if (!d || !d.ok) {
+    $("#authStatusText").textContent = "Status unavailable: " + (d && d.message ? d.message : "unknown error");
+    return;
+  }
   if (d.authenticated) {
     $("#authStatusText").textContent = "Signed in";
     const fab = d.fab || {};
@@ -413,47 +450,69 @@ async function refreshAuthTab() {
 
 async function startLogin() {
   toast("Starting Fab login (browser window should open)…", "info");
-  const j = await api("/api/auth/login", { method: "POST", body: JSON.stringify({ manual: false }) });
+  const j = await api("/api/auth/login", { method: "POST", body: { manual: false } });
   watchJob(j.job_id, async (res) => {
     if (res.ok) { toast("Login finished. Checking status…", "info"); await refreshAuthTab(); }
-    else { toast("Login failed: " + (res.message || "unknown"), "error"); }
-  }, async (err) => { toast("Login failed: " + (err.message || "unknown"), "error"); });
+    else toast("Login failed: " + (res.message || "unknown"), "error");
+  }, async (err) => toast("Login failed: " + (err.message || "unknown"), "error"));
 }
 
 async function doLogout() {
-  await api("/api/auth/logout", { method: "POST", body: JSON.stringify({}) });
+  await api("/api/auth/logout", { method: "POST", body: {} });
   await refreshAuthTab();
   toast("Logged out", "info");
 }
 
 /* ---------------------------------------------------------------- init */
 
+function setFilter(key, value) {
+  state.filters[key] = value;
+  saveFilters();
+  renderResults();
+}
+
+function clearFilters() {
+  state.filters = { query: "", engine: "", category: "", format: "", platform: "", sort: "latest" };
+  setupFilters();
+  renderResults();
+}
+
 async function init() {
-  await loadLibrary();
-  await refreshAuthTab();
+  document.querySelectorAll("[data-sort]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.filters.sort = button.dataset.sort;
+      document.querySelectorAll("[data-sort]").forEach((tab) => tab.setAttribute("aria-pressed", String(tab === button)));
+      saveFilters();
+      renderResults();
+    });
+  });
+  $("#librarySearch").addEventListener("input", (event) => setFilter("query", event.target.value));
+  [["#engineFilter", "engine"], ["#categoryFilter", "category"], ["#formatFilter", "format"], ["#platformFilter", "platform"]].forEach(([selector, key]) => {
+    $(selector).addEventListener("change", (event) => setFilter(key, event.target.value));
+  });
+  $("#clearFilters").addEventListener("click", clearFilters);
   $("#btnLogin").addEventListener("click", startLogin);
   $("#btnLogout").addEventListener("click", doLogout);
-  $("#btnHelp").addEventListener("click", () => { $("#helpModal").classList.remove("hidden"); });
-  $("#helpModalClose").addEventListener("click", () => { $("#helpModal").classList.add("hidden"); });
-  $("#resultsGrid").addEventListener("click", async (e) => {
-    const card = e.target.closest(".asset-card");
-    if (!card) return;
-    const uid = card.dataset.uid; const title = card.dataset.title;
-    if (uid) await openDownloadModal(uid, title);
+  $("#btnHelp").addEventListener("click", () => $("#helpModal").classList.remove("hidden"));
+  $("#helpModalClose").addEventListener("click", () => $("#helpModal").classList.add("hidden"));
+  $("#resultsGrid").addEventListener("click", async (event) => {
+    const card = event.target.closest(".asset-card");
+    if (card && card.dataset.uid) await openDownloadModal(card.dataset.uid, card.dataset.title);
   });
-  $("#resultsGrid").addEventListener("contextmenu", (e) => {
-    e.preventDefault();
-    const card = e.target.closest(".asset-card");
+  $("#resultsGrid").addEventListener("contextmenu", (event) => {
+    const card = event.target.closest(".asset-card");
     if (!card) return;
-    const uid = card.dataset.uid;
-    if (uid) {
-      copyUid(uid, card);
+    event.preventDefault();
+    if (card.dataset.uid) {
+      copyUid(card.dataset.uid, card);
       card.classList.add("copied");
       setTimeout(() => card.classList.remove("copied"), 800);
     }
   });
   $("#engineModalCancel").addEventListener("click", () => { $("#engineModal").classList.add("hidden"); state.pending = null; });
   $("#engineModalConfirm").addEventListener("click", confirmDownload);
+  await loadLibrary();
+  try { await refreshAuthTab(); } catch (e) { $("#authStatusText").textContent = "Status unavailable: " + e.message; }
 }
 
 document.addEventListener("DOMContentLoaded", init);

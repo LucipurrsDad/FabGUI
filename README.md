@@ -4,65 +4,53 @@ A self-hosted web GUI for [FabCLI](https://github.com/zirklerite/FabCLI) — the
 
 FabGUI wraps the `fabcli` binary behind a small local web server and gives you a browser UI for:
 
-- **Owned assets** — lists every asset you've claimed with FabCLI, sorted alphabetically, with thumbnails
-- **Download** — click any asset (picture or title) to open the download prompt into your configured folder
-- **Copy UID** — right-click any asset to copy its listing UID to the clipboard (toast confirms)
-- **Authentication** — sign in / out with Epic / Fab, view session status, expiry, and account info
-- **Settings** — configure the download folder (saved to `settings.json`, persists between restarts)
+- **Owned library** — browse owned Fab items as image cards.
+- **Search and filters** — search titles, categories, IDs and descriptions; filter by Unreal Engine version, Fab category, distribution format, and target platform.
+- **Sorting** — sort by the highest listed engine version or alphabetically. The selected view and filters are remembered in the browser.
+- **Card metadata** — see the latest listed engine version, category, and distribution format at a glance.
+- **Download** — click an item to open the download prompt.
+- **Copy UID** — right-click a card to copy its listing UID.
+- **Authentication** — sign in / out with Epic / Fab, view session status, expiry, and account info.
+
+Filter options and category counts are built from the current `fabcli library` response. Categories reflect Fab's metadata and may be broad; distribution format (`distributionMethod`, e.g. `ASSET_PACK`) is a separate field. “Latest engine” sorts by each item's highest `engineVersions` value; it does not classify an item as a complete Unreal project.
 
 Everything runs on your machine via the local `fabcli` binary; no API keys or extra services needed.
 
-## What changed from the original FabGUI
-
-- **Card layout** — assets display as cards (image + title) instead of a table, filling the full viewport width
-- **Click to download** — clicking a card opens the download modal
-- **Right-click to copy UID** — copies the listing UID with a centered toast confirmation
-- **Help button** — in the header next to the logo, explains how to use the site
-- **Removed** — top nav tabs, search bar, filters, "I've claimed it" checkbox, Library tab, Downloads tab, FabCLI binary field, Price/Owned columns, themes
-
 ## Requirements
 
-- `fabcli` installed and on your `PATH` (see the [FabCLI README](https://github.com/zirklerite/FabCLI#readme))
-- Python 3.8+ (stdlib only — no `pip install` needed)
-- Shared libraries: `libwebkit2gtk-4.1.so.0`, `libjavascriptcoregtk-4.1.so.0`, `libharfbuzz-icu.so.0`, `libmanette-0.2.so.0`, `libhyphen.so.0`
-- A graphical environment for the Fab login webview
+- `fabcli` installed and on your `PATH` (see the [FabCLI README](https://github.com/zirklerite/FabCLI#readme)).
+- Python 3.8+ (stdlib only — no `pip install` needed).
+- FabCLI's WebKit runtime dependencies and a graphical environment for its login webview. On current Arch-based distributions such as CachyOS, install the system packages with `sudo pacman -S webkit2gtk-4.1 harfbuzz-icu libmanette hyphen` rather than using libraries copied from an old Arch archive.
 
 ## Install
 
-Run the included install script. It downloads the required shared-library packages from the Arch Linux archive, extracts them into `~/.local/lib/`, installs FabGUI, and sets up a systemd user service:
+Run the included install script to install FabGUI and set up a systemd user service:
 
 ```bash
-cd /home/deck/Projects/FabGUI
+cd /path/to/FabGUI
 chmod +x install.sh
 ./install.sh
 ```
 
-The script will:
-
-1. Create `~/.local/lib/` if it doesn't exist
-2. Download and extract `webkit2gtk`, `harfbuzz-icu`, `libmanette`, and `hyphen` packages
-3. Copy all `*.so` files into `~/.local/lib/`
-4. Install FabGUI files to `~/.local/share/fabgui/`
-5. Create and enable a systemd user service at `~/.config/systemd/user/fabgui.service`
-6. Start the service
-
 Then open <http://127.0.0.1:8000> in your browser.
+
+If FabCLI was installed to `~/.local/bin`, ensure that directory is on `PATH` for both your shell and the systemd user service. For Bash, add this line to `~/.bashrc`:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+The installer configures the service `PATH` to include `~/.local/bin`.
 
 ### Manual install
 
-If you prefer not to use the script:
-
 ```bash
-mkdir -p ~/.local/lib
-# Copy the required .so files into ~/.local/lib/
-cp server.py static/ settings.json ~/.local/share/fabgui/
-# Then run:
+mkdir -p ~/.local/share/fabgui
+cp -r server.py static settings.json ~/.local/share/fabgui/
 python3 ~/.local/share/fabgui/server.py
 ```
 
 ## Run
-
-If using the systemd user service:
 
 ```bash
 systemctl --user start fabgui
@@ -74,21 +62,21 @@ Then open <http://127.0.0.1:8000> in your browser.
 
 ## Configuration
 
-Settings (download folder) are saved to `settings.json` and persist between restarts.
+Settings are saved to `settings.json` and persist between restarts.
 
 Environment variables:
 
-- `FABGUI_PORT` — port to listen on (default `8000`)
-- `FABGUI_FABCLI` — path to the `fabcli` executable (default `fabcli`)
+- `FABGUI_PORT` — port to listen on (default `8000`).
+- `FABGUI_FABCLI` — path to the `fabcli` executable (default `fabcli`).
 
 ## Layout
 
-- `server.py` — stdlib HTTP server + subprocess wrapper around `fabcli`
-- `static/index.html` — the GUI page
-- `static/style.css` — styling
-- `static/app.js` — UI logic
-- `settings.json` — runtime settings (download folder)
-- `install.sh` — automated installer
+- `server.py` — stdlib HTTP server + subprocess wrapper around `fabcli`.
+- `static/index.html` — GUI page.
+- `static/style.css` — styling.
+- `static/app.js` — UI logic.
+- `settings.json` — runtime settings.
+- `install.sh` — automated installer.
 
 ## License
 
