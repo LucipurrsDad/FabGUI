@@ -32,7 +32,8 @@ Everything runs on your machine via the local `fabcli` binary; no API keys or ex
 Run the included install script. It downloads the required shared-library packages from the Arch Linux archive, extracts them into `~/.local/lib/`, installs FabGUI, and sets up a systemd user service:
 
 ```bash
-cd /home/deck/Projects/FabGUI
+git clone https://github.com/LucipurrsDad/FabGUI.git
+cd /home/$USER/FabGUI
 chmod +x install.sh
 ./install.sh
 ```
