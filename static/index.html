@@ -46,7 +46,7 @@
         <div class="library-tools" aria-label="Library search and filters">
           <div class="library-tool-row library-filters">
             <input id="librarySearch" class="input library-search" type="search" placeholder="Search titles, categories…" aria-label="Search owned assets">
-            <select id="engineFilter" class="input" aria-label="Filter by Unreal Engine version"><option value="">All engines</option></select>
+            <select id="engineFilter" class="input" aria-label="Filter by Unreal Engine version up to the selected version"><option value="">Any engine</option></select>
             <select id="categoryFilter" class="input" aria-label="Filter by Fab category"><option value="">All categories</option></select>
             <select id="formatFilter" class="input" aria-label="Filter by distribution format"><option value="">All formats</option></select>
             <select id="platformFilter" class="input" aria-label="Filter by target platform"><option value="">All platforms</option></select>
@@ -82,7 +82,7 @@
     <div class="modal-card">
       <h3>How to use FabGUI</h3>
       <ul class="help-list">
-        <li>Filter by the engine version supported by each asset.</li>
+        <li>Filter assets by the newest supported engine up to your selected version.</li>
         <li>Card download options only list platforms compatible with the selected engine.</li>
         <li>Downloads use the Fab listing UID.</li>
         <li>Right-click a card to copy its listing UID.</li>
@@ -92,5 +92,6 @@
   </div>
   <div id="toast" class="toast"></div>
   <script src="/static/app.js"></script>
+  <script src="/static/engine-sort.js"></script>
 </body>
 </html>
