@@ -16,22 +16,10 @@
       grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
       align-items: center;
     }
-    .header-sort-tabs {
-      grid-column: 2;
-      display: flex;
-      justify-content: center;
-      gap: 6px;
-      padding: 2px;
-    }
+    .header-sort-tabs { grid-column: 2; display: flex; justify-content: center; gap: 6px; padding: 2px; }
     .sort-tab { white-space: nowrap; border-radius: 999px; padding: 6px 12px; }
     .sort-tab[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
-    .header-actions {
-      grid-column: 3;
-      justify-self: end;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
+    .header-actions { grid-column: 3; justify-self: end; display: flex; align-items: center; gap: 10px; }
     .header-actions .save-location { margin-left: 0; }
     .library-tools { position: sticky; top: 65px; z-index: 15; margin: -1px 0 14px; padding: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 6px 16px rgba(0,0,0,.24); }
     .library-tool-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -43,6 +31,9 @@
     .asset-meta-chip { display: inline-block; max-width: 100%; padding: 2px 7px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-size: 10px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .asset-meta-chip.engine { color: var(--blue); border-color: rgba(88,166,255,.35); }
     .asset-meta-chip.category { color: var(--text); }
+    .download-options { display: grid; gap: 12px; margin-top: 16px; }
+    .download-options label { display: grid; gap: 5px; color: var(--muted); font-size: 13px; }
+    .download-options select { width: 100%; }
     @media (max-width: 760px) {
       header.top { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 10px 12px; }
       .brand { grid-column: 1; grid-row: 1; }
@@ -70,10 +61,7 @@
         <button class="btn sort-tab" data-sort="title" aria-pressed="false">A–Z</button>
       </nav>
       <div class="header-actions">
-        <div class="save-location">
-          <span class="save-label">Save to</span>
-          <span id="saveLocationText" class="save-path">~/Downloads</span>
-        </div>
+        <div class="save-location"><span class="save-label">Save to</span><span id="saveLocationText" class="save-path">~/Downloads</span></div>
         <button id="btnHelp" class="btn ghost">Help</button>
       </div>
     </header>
@@ -91,10 +79,7 @@
               <button id="clearFilters" class="btn small" type="button">Clear</button>
             </div>
           </div>
-
-          <div class="results-head">
-            <h3>Owned library <span id="resultCount" class="muted"></span></h3>
-          </div>
+          <div class="results-head"><h3>Owned library <span id="resultCount" class="muted"></span></h3></div>
           <div id="resultsWrap">
             <div id="resultsEmpty" class="placeholder">No assets match these filters.</div>
             <div id="resultsLoading" class="placeholder hidden"><span class="spinner"></span>Loading…</div>
@@ -108,30 +93,14 @@
           <h2>Authentication</h2>
           <p>Status: <strong id="authStatusText">—</strong></p>
           <div class="auth-grid">
-            <div class="auth-card">
-              <h4>Epic session</h4>
-              <div class="kv"><span class="k">Authenticated</span><span id="authEpicState">—</span></div>
-              <div class="kv"><span class="k">Expires</span><span id="authEpicExpires">—</span></div>
-            </div>
-            <div class="auth-card">
-              <h4>Fab session</h4>
-              <div class="kv"><span class="k">Status</span><span id="fabSessionState">—</span></div>
-              <div class="kv"><span class="k">Days remaining</span><span id="fabSessionDays">—</span></div>
-            </div>
-            <div class="auth-card">
-              <h4>Account</h4>
-              <div class="kv"><span class="k">Display name</span><span id="whoDisplayName">—</span></div>
-              <div class="kv"><span class="k">Email</span><span id="whoEmail">—</span></div>
-            </div>
+            <div class="auth-card"><h4>Epic session</h4><div class="kv"><span class="k">Authenticated</span><span id="authEpicState">—</span></div><div class="kv"><span class="k">Expires</span><span id="authEpicExpires">—</span></div></div>
+            <div class="auth-card"><h4>Fab session</h4><div class="kv"><span class="k">Status</span><span id="fabSessionState">—</span></div><div class="kv"><span class="k">Days remaining</span><span id="fabSessionDays">—</span></div></div>
+            <div class="auth-card"><h4>Account</h4><div class="kv"><span class="k">Display name</span><span id="whoDisplayName">—</span></div><div class="kv"><span class="k">Email</span><span id="whoEmail">—</span></div></div>
           </div>
-          <div class="auth-actions">
-            <button id="btnLogin" class="btn primary">Sign in with Epic / Fab</button>
-            <button id="btnLogout" class="btn danger">Sign out</button>
-          </div>
+          <div class="auth-actions"><button id="btnLogin" class="btn primary">Sign in with Epic / Fab</button><button id="btnLogout" class="btn danger">Sign out</button></div>
         </div>
       </section>
     </main>
-
     <footer></footer>
   </div>
 
@@ -139,14 +108,11 @@
     <div class="modal-card">
       <h3 id="engineModalTitle">Download asset</h3>
       <p>Target folder: <code id="engineModalDir"></code></p>
-      <div id="engineModalBody" class="hidden">
-        <label class="check">Engine version:</label>
-        <select id="engineSelect" class="input"></select>
+      <div id="engineModalBody" class="download-options">
+        <label>Unreal Engine version<select id="engineSelect" class="input"></select></label>
+        <label>Target platform<select id="downloadPlatformSelect" class="input"></select></label>
       </div>
-      <div class="modal-actions">
-        <button id="engineModalCancel" class="btn ghost">Cancel</button>
-        <button id="engineModalConfirm" class="btn primary">Download</button>
-      </div>
+      <div class="modal-actions"><button id="engineModalCancel" class="btn ghost">Cancel</button><button id="engineModalConfirm" class="btn primary">Download</button></div>
     </div>
   </div>
 
@@ -154,18 +120,14 @@
     <div class="modal-card">
       <h3>How to use FabGUI</h3>
       <ul class="help-list">
-        <li>Use the centered tabs in the header to sort by newest engine or alphabetically.</li>
+        <li>Use the centered tabs to sort by newest supported engine version or alphabetically.</li>
         <li>Search and filter the owned library by engine, category, distribution format, or target platform.</li>
-        <li>Click a card to open the download prompt; right-click to copy its listing UID.</li>
-        <li>Latest engine sorts by each item's highest listed Unreal Engine version; it does not identify a complete Unreal project.</li>
-        <li>Authentication is handled through FabCLI.</li>
+        <li>Downloads use the Fab listing UID and offer only engine versions listed for that asset.</li>
+        <li>Click a card to download; right-click to copy its listing UID.</li>
       </ul>
-      <div class="modal-actions">
-        <button id="helpModalClose" class="btn primary">Got it</button>
-      </div>
+      <div class="modal-actions"><button id="helpModalClose" class="btn primary">Got it</button></div>
     </div>
   </div>
-
   <div id="toast" class="toast"></div>
   <script src="/static/app.js"></script>
 </body>
