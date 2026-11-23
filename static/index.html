@@ -8,14 +8,34 @@
   <link rel="icon" href="/static/fab.jpeg">
   <link rel="manifest" href="/static/manifest.json">
   <style>
-    header.top { position: sticky; top: 0; z-index: 20; }
+    header.top {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      align-items: center;
+    }
+    .header-sort-tabs {
+      grid-column: 2;
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+      padding: 2px;
+    }
+    .sort-tab { white-space: nowrap; border-radius: 999px; padding: 6px 12px; }
+    .sort-tab[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .header-actions {
+      grid-column: 3;
+      justify-self: end;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header-actions .save-location { margin-left: 0; }
     .library-tools { position: sticky; top: 65px; z-index: 15; margin: -1px 0 14px; padding: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 6px 16px rgba(0,0,0,.24); }
     .library-tool-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
     .library-tool-row + .library-tool-row { margin-top: 9px; }
-    .library-tool-label { color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
-    .sort-tabs { display: flex; gap: 6px; overflow-x: auto; padding: 2px; }
-    .sort-tab { white-space: nowrap; border-radius: 999px; padding: 6px 12px; }
-    .sort-tab[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
     .library-filters { display: flex; flex: 1; flex-wrap: wrap; gap: 8px; align-items: center; }
     .library-filters .input { min-width: 130px; max-width: 220px; padding: 7px 9px; }
     .library-search { flex: 1; min-width: 190px !important; max-width: 360px !important; }
@@ -23,12 +43,21 @@
     .asset-meta-chip { display: inline-block; max-width: 100%; padding: 2px 7px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-size: 10px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .asset-meta-chip.engine { color: var(--blue); border-color: rgba(88,166,255,.35); }
     .asset-meta-chip.category { color: var(--text); }
-    @media (max-width: 700px) {
-      main { padding: 12px 10px 28px; }
-      .library-tools { top: 58px; padding: 9px; }
+    @media (max-width: 760px) {
+      header.top { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 10px 12px; }
+      .brand { grid-column: 1; grid-row: 1; }
+      .header-actions { grid-column: 2; grid-row: 1; gap: 6px; }
+      .header-actions .save-location { padding: 5px 9px; gap: 6px; }
+      .header-actions .save-path { max-width: 115px; }
+      .header-sort-tabs { grid-column: 1 / -1; grid-row: 2; }
+      .library-tools { top: 100px; padding: 9px; }
       .library-filters { width: 100%; }
       .library-filters .input, .library-search { flex: 1 1 145px; min-width: 0 !important; max-width: none !important; }
-      .sort-tabs { width: 100%; }
+    }
+    @media (max-width: 430px) {
+      .header-actions .save-label { display: none; }
+      .header-actions .save-path { max-width: 105px; }
+      .header-sort-tabs .sort-tab { padding: 5px 10px; font-size: 12px; }
     }
   </style>
 </head>
@@ -36,24 +65,23 @@
   <div id="root-app">
     <header class="top">
       <div class="brand"><img src="/static/fab.jpeg" class="brand-img" alt="">Fab<em>GUI</em></div>
-      <div class="save-location">
-        <span class="save-label">Save to</span>
-        <span id="saveLocationText" class="save-path">~/Downloads</span>
+      <nav class="header-sort-tabs" role="group" aria-label="Sort owned library">
+        <button class="btn sort-tab" data-sort="latest" aria-pressed="true">Latest engine</button>
+        <button class="btn sort-tab" data-sort="title" aria-pressed="false">A–Z</button>
+      </nav>
+      <div class="header-actions">
+        <div class="save-location">
+          <span class="save-label">Save to</span>
+          <span id="saveLocationText" class="save-path">~/Downloads</span>
+        </div>
+        <button id="btnHelp" class="btn ghost">Help</button>
       </div>
-      <button id="btnHelp" class="btn ghost">Help</button>
     </header>
 
     <main>
       <section id="tab-search" class="tab-panel active">
         <div class="panel">
-          <div class="library-tools" aria-label="Library sorting and filters">
-            <div class="library-tool-row">
-              <span class="library-tool-label">Sort</span>
-              <div class="sort-tabs" role="group" aria-label="Sort owned assets">
-                <button class="btn sort-tab" data-sort="latest" aria-pressed="true">Latest engine</button>
-                <button class="btn sort-tab" data-sort="title" aria-pressed="false">A–Z</button>
-              </div>
-            </div>
+          <div class="library-tools" aria-label="Library search and filters">
             <div class="library-tool-row library-filters">
               <input id="librarySearch" class="input library-search" type="search" placeholder="Search titles, categories…" aria-label="Search owned assets">
               <select id="engineFilter" class="input" aria-label="Filter by Unreal Engine version"><option value="">All engines</option></select>
@@ -126,11 +154,10 @@
     <div class="modal-card">
       <h3>How to use FabGUI</h3>
       <ul class="help-list">
+        <li>Use the centered tabs in the header to sort by newest engine or alphabetically.</li>
+        <li>Search and filter the owned library by engine, category, distribution format, or target platform.</li>
         <li>Click a card to open the download prompt; right-click to copy its listing UID.</li>
-        <li>Use the pinned sort tabs and filters to browse the owned library by engine, category, format, or platform.</li>
-        <li>Categories and filter counts come from the items in your Fab library response.</li>
-        <li>Latest engine sorts by each item's highest listed Unreal Engine version; it does not claim that every listing is a project.</li>
-        <li>Downloads are stored in the configured FabCLI output folder.</li>
+        <li>Latest engine sorts by each item's highest listed Unreal Engine version; it does not identify a complete Unreal project.</li>
         <li>Authentication is handled through FabCLI.</li>
       </ul>
       <div class="modal-actions">
