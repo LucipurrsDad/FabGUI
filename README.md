@@ -1,4 +1,5 @@
 # FabGUI
+<img width="3840" height="2100" alt="Screenshot_20261123_192500" src="https://github.com/user-attachments/assets/88e010c3-e3d4-4f49-b7fb-7995d85e0cb7" />
 
 A self-hosted web app for [FabCLI](https://github.com/zirklerite/FabCLI), the Epic Games / Fab asset downloader for Linux. FabGUI turns your owned Fab library into a searchable, sortable visual catalog, with direct download and authentication controls.
 
