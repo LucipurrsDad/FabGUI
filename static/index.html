@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#34373d">
   <title>FabGUI - Fab / Epic Games asset downloader</title>
-  <link rel="stylesheet" href="/static/style.css?v=glass-1">
-  <link rel="stylesheet" href="/static/appearance.css?v=glass-1">
+  <link rel="stylesheet" href="/static/style.css?v=glass-2">
+  <link rel="stylesheet" href="/static/appearance.css?v=glass-2">
   <link rel="icon" href="/static/fab.jpeg">
   <link rel="manifest" href="/static/manifest.json">
   <style>
@@ -31,7 +31,14 @@
   </style>
 </head>
 <body>
-  <video id="backgroundVideo" class="background-video" autoplay loop muted playsinline aria-hidden="true"></video>
+  <svg class="background-lines" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+    <path d="M-100 210 C180 90 340 350 630 220 S1080 80 1700 250" />
+    <path d="M-120 330 C200 170 390 480 700 320 S1160 170 1740 360" />
+    <path d="M-100 470 C240 300 440 610 760 460 S1230 300 1720 500" />
+    <path d="M-130 600 C210 420 480 760 800 590 S1250 440 1730 650" />
+    <path d="M-100 740 C240 560 500 900 840 730 S1280 600 1730 790" />
+    <path d="M-100 880 C240 690 540 1020 900 850 S1300 720 1730 930" />
+  </svg>
   <div class="background-scrim" aria-hidden="true"></div>
   <header class="top">
     <div class="brand"><img src="/static/fab.jpeg" class="brand-img" alt="">Fab<em>GUI</em></div>
@@ -45,18 +52,15 @@
         <summary class="btn ghost" aria-label="Appearance settings">Appearance</summary>
         <section class="appearance-popover" aria-label="Appearance settings">
           <h2>Liquid glass</h2>
-          <p class="appearance-description">Personalize the animated wallpaper and neutral glass tint. Your choices stay in this browser.</p>
-          <label class="appearance-check"><input id="wallpaperEnabled" type="checkbox" checked> Use video wallpaper</label>
-          <label class="appearance-field">Choose a video from this device
-            <input id="wallpaperFile" type="file" accept="video/*">
-          </label>
-          <div class="appearance-status" id="wallpaperStatus" role="status">Choose a video to use as your wallpaper.</div>
+          <p class="appearance-description">Tune the animated lines and neutral grey glass. Your choices stay in this browser.</p>
+          <label class="appearance-check"><input id="wallpaperEnabled" type="checkbox" checked> Use animated line background</label>
+          <div class="appearance-status" id="wallpaperStatus" role="status">Slow flowing glass lines</div>
           <label class="appearance-range-label" for="glassTint"><span>Glass tint</span><output id="glassTintValue">36%</output></label>
           <input id="glassTint" class="appearance-range" type="range" min="0" max="75" step="1" value="36">
           <p class="appearance-hint">Higher tint strength means less transparent glass. The tint stays neutral grey.</p>
           <label class="appearance-range-label" for="glassFrost"><span>Softness</span><output id="glassFrostValue">2</output></label>
           <input id="glassFrost" class="appearance-range" type="range" min="0" max="8" step="0.5" value="2">
-          <label class="appearance-range-label" for="wallpaperDim"><span>Wallpaper dimming</span><output id="wallpaperDimValue">24%</output></label>
+          <label class="appearance-range-label" for="wallpaperDim"><span>Background dimming</span><output id="wallpaperDimValue">24%</output></label>
           <input id="wallpaperDim" class="appearance-range" type="range" min="0" max="70" step="1" value="24">
           <button id="resetAppearance" class="btn small" type="button">Reset appearance</button>
         </section>
@@ -86,7 +90,6 @@
       </div>
     </section>
   </main>
-
   <div id="engineModal" class="modal hidden">
     <div class="modal-card">
       <h3 id="engineModalTitle">Download asset</h3>
@@ -95,13 +98,9 @@
         <label>Unreal Engine version<select id="engineSelect" class="input"></select></label>
         <label>Target platform<select id="downloadPlatformSelect" class="input"></select></label>
       </div>
-      <div class="modal-actions">
-        <button id="engineModalCancel" class="btn ghost">Cancel</button>
-        <button id="engineModalConfirm" class="btn primary">Download</button>
-      </div>
+      <div class="modal-actions"><button id="engineModalCancel" class="btn ghost">Cancel</button><button id="engineModalConfirm" class="btn primary">Download</button></div>
     </div>
   </div>
-
   <div id="helpModal" class="modal hidden">
     <div class="modal-card">
       <h3>How to use FabGUI</h3>
@@ -115,8 +114,9 @@
     </div>
   </div>
   <div id="toast" class="toast"></div>
-  <script src="/static/app.js?v=glass-1"></script>
-  <script src="/static/engine-sort.js?v=glass-1"></script>
-  <script type="module" src="/static/appearance.js?v=glass-1"></script>
+  <script src="/static/app.js?v=glass-2"></script>
+  <script src="/static/engine-sort.js?v=glass-2"></script>
+  <script type="module" src="/static/appearance.js?v=glass-2"></script>
+  <script src="/static/interaction-fix.js?v=glass-2"></script>
 </body>
 </html>
