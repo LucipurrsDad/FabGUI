@@ -26,16 +26,31 @@ DOWNLOAD_HISTORY = []
 HISTORY_LOCK = threading.Lock()
 
 
+def _expand_home_env(text):
+    home = str(Path.home())
+    user = os.environ.get("USER") or Path.home().name
+    replacements = {
+        "~": home,
+        "$HOME": home,
+        "${HOME}": home,
+        "$USER": user,
+        "${USER}": user,
+    }
+    for key, val in replacements.items():
+        if text == key:
+            return val
+        if text.startswith(key + "/"):
+            return val + text[len(key):]
+        if text.startswith(key + os.sep):
+            return val + text[len(key):]
+    return text
+
+
 def resolve_download_dir(value=None):
     text = str(value or SETTINGS.get("download_dir") or DEFAULT_DOWNLOAD_DIR).strip()
-    if text == "~":
-        text = str(Path.home())
-    elif text.startswith("~/"):
+    text = _expand_home_env(text)
+    if text.startswith("~/"):
         text = str(Path.home()) + text[1:]
-    elif text.startswith("$HOME"):
-        text = str(Path.home()) + text[5:]
-    elif text.startswith("${HOME}"):
-        text = str(Path.home()) + text[7:]
     return str(Path(text).expanduser().resolve())
 
 
@@ -296,6 +311,66 @@ class FabGuiHandler(BaseHTTPRequestHandler):
         except Exception:
             return {}
 
+    def _job_progress_sse(self, jid):
+        """Server-sent events stream that polls a job and emits progress ticks."""
+        with JOBS_LOCK:
+            job = JOBS.get(jid)
+        if job is None:
+            return self._send_json(404, {"ok": False, "message": "job not found"})
+
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.end_headers()
+
+        def send(event, data):
+            try:
+                self.wfile.write(f"event: {event}\ndata: {json.dumps(data)}\n\n".encode("utf-8"))
+                self.wfile.flush()
+            except Exception:
+                return False
+            return True
+
+        last_state = None
+        ticks = 0
+        try:
+            while True:
+                with JOBS_LOCK:
+                    job = JOBS.get(jid)
+                if job is None:
+                    send("error", {"message": "job not found"})
+                    break
+                state = job.get("state")
+                result = job.get("result") or {}
+                error = job.get("error") or {}
+                progress_pct = None
+                if isinstance(result, dict):
+                    progress_pct = result.get("progress")
+                # Emit a tick every ~1s so the UI can animate the progress bar.
+                ticks += 1
+                changed = state != last_state or (ticks % 10 == 0)
+                last_state = state
+                if changed:
+                    send("progress", {
+                        "job_id": jid,
+                        "state": state,
+                        "progress": progress_pct,
+                        "ok": result.get("ok") if isinstance(result, dict) else None,
+                        "message": result.get("message") if isinstance(result, dict) else None,
+                        "error": error.get("message") if isinstance(error, dict) else None,
+                    })
+                if state in ("success", "error"):
+                    break
+                time.sleep(0.1)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        finally:
+            try:
+                self.wfile.flush()
+            except Exception:
+                pass
+
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path or "/"
@@ -322,7 +397,11 @@ class FabGuiHandler(BaseHTTPRequestHandler):
                 jobs = sorted(JOBS.values(), key=lambda item: item["created_at"], reverse=True)
             return self._send_json(200, {"jobs": jobs[:30]})
         if path.startswith("/api/jobs/"):
-            jid = path[len("/api/jobs/"):].strip("/")
+            rest = path[len("/api/jobs/"):].strip("/")
+            if rest.endswith("/progress"):
+                jid = rest[:-len("/progress")].lstrip("/")
+                return self._job_progress_sse(jid)
+            jid = rest
             with JOBS_LOCK:
                 job = JOBS.get(jid)
             if job is None:

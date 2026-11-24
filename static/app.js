@@ -46,6 +46,16 @@ function fmtBytes(value) {
   return `${output.toFixed(output < 10 ? 2 : 1)} ${units[index]}`;
 }
 
+function slugify(value) {
+  return String(value || "fab-asset")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "fab-asset";
+}
+
 function compareVersions(a, b) {
   const left = String(a).match(/\d+/g) || [];
   const right = String(b).match(/\d+/g) || [];
@@ -335,31 +345,90 @@ async function confirmDownload() {
       toast("Download failed: " + (response.message || "unknown"), "error");
       return;
     }
-    toast("Download started…", "info");
+    toast("Download started…", "loading");
     const jobId = response.job_id;
     if (!jobId) return;
+    addJobRow(jobId, $("#engineModalTitle").textContent || pending.uid, $("#engineSelect").value, $("#downloadPlatformSelect").value);
     openEventSource(jobId, (progress) => updateJobProgress(jobId, progress));
     watchJob(jobId, (result) => {
+      const row = document.getElementById("job-" + jobId);
+      if (row) {
+        const statusCell = row.querySelector(".job-status");
+        const bar = row.querySelector(".progress-bar > div");
+        if (bar) bar.style.width = "100%";
+        if (statusCell) {
+          statusCell.textContent = result.ok ? "Done!" : "Failed";
+          statusCell.className = "job-status " + (result.ok ? "success" : "error");
+        }
+      }
       if (result.ok) toast(`Download complete: ${result.data.files} files, ${fmtBytes(result.data.total_bytes)}`, "success");
       else toast("Download failed: " + (result.message || "unknown"), "error");
-    }, (error) => toast("Download failed: " + (error.message || "unknown"), "error"));
+    }, (error) => {
+      const row = document.getElementById("job-" + jobId);
+      if (row) {
+        const statusCell = row.querySelector(".job-status");
+        if (statusCell) { statusCell.textContent = "Failed"; statusCell.className = "job-status error"; }
+      }
+      toast("Download failed: " + (error.message || "unknown"), "error");
+    });
   } catch (error) {
     toast("Download failed: " + error.message, "error");
   }
 }
 
+const jobProgress = {};
+
+function addJobRow(jobId, title, engine, platform) {
+  const body = $("#jobsBody");
+  if (!body) return;
+  const row = document.createElement("tr");
+  row.id = "job-" + jobId;
+  row.innerHTML = `
+    <td class="w-check"><span class="spinner" style="width:14px;height:14px;border-width:2px;margin-right:6px;"></span></td>
+    <td class="cell-title" title="${esc(title)}">${esc(title)}</td>
+    <td class="job-status running">Starting · ${esc(engine.replace("UE_", "UE "))} / ${esc(platform)}</td>
+    <td class="job-progress"><div class="progress-bar"><div></div></div><span style="font-size:0.8em;color:#aaa">0%</span></td>
+  `;
+  body.appendChild(row);
+}
+
 function updateJobProgress(jobId, progress) {
   const body = $("#jobsBody");
   if (!body) return;
-  for (const row of body.querySelectorAll("tr")) {
-    const cells = row.querySelectorAll("td");
-    if (cells.length < 2 || cells[0].textContent !== jobId) continue;
-    const percent = progress.percent != null ? Math.round(progress.percent) : null;
-    if (percent != null) {
-      cells[5].innerHTML = `<div style="width:100%;background:#2a2a2a;border-radius:4px;overflow:hidden"><div style="width:${percent}%;height:6px;background:#4a9eff"></div></div><span style="font-size:0.8em;color:#aaa">${percent}%</span>`;
-    }
-    break;
+  let row = document.getElementById("job-" + jobId);
+  if (!row) return;
+  const cells = row.querySelectorAll("td");
+  if (cells.length < 4) return;
+  const percent = progress.percent != null ? Math.round(progress.percent) : null;
+  const statusCell = cells[2];
+  const progressCell = cells[3];
+  const bar = progressCell.querySelector(".progress-bar > div");
+  const pctText = progressCell.querySelector("span");
+  let pct = percent;
+  if (pct == null) {
+    jobProgress[jobId] = Math.min(90, (jobProgress[jobId] || 0) + 2);
+    pct = jobProgress[jobId];
+    statusCell.textContent = "Downloading · " + pct + "%";
+    statusCell.className = "job-status running";
   }
+    if (bar) bar.style.width = percent + "%";
+    if (pctText) pctText.textContent = percent + "%";
+    if (percent >= 100) {
+      statusCell.textContent = "Processing…";
+      statusCell.className = "job-status running";
+    } else {
+      statusCell.textContent = "Downloading · " + percent + "%";
+      statusCell.className = "job-status running";
+    }
+  }
+  const downloaded = progress.downloaded_bytes != null ? fmtBytes(progress.downloaded_bytes) : "";
+  const total = progress.total_bytes != null ? fmtBytes(progress.total_bytes) : "";
+  const dlRate = progress.download_speed ? fmtBytes(progress.download_speed) + "/s" : "";
+  const detail = [downloaded, total ? "/" + total : "", dlRate].filter(Boolean).join(" ");
+  if (detail) statusCell.textContent = (statusCell.textContent.split(" · ")[0] || "Downloading") + " · " + detail;
+  // clear the spinner once we have progress
+  const spin = row.querySelector(".spinner");
+  if (spin) spin.style.display = "none";
 }
 
 async function copyUid(uid, anchor) {
@@ -390,6 +459,106 @@ function clearFilters() {
   setupFilters(); renderResults();
 }
 
+/* ---------------------------------------------------------------- auth */
+
+async function refreshAuthTab() {
+  const d = await api("/api/auth/status").catch(() => ({ ok: false }));
+  if (!d || !d.ok) { $("#authStatusText").textContent = "Status unavailable"; return; }
+  if (d.authenticated) {
+    $("#authStatusText").textContent = "Signed in";
+    const fab = d.fab || {};
+    $("#authEpicState").textContent = "OK";
+    $("#authEpicExpires").textContent = d.expires_at || "—";
+    $("#fabSessionState").textContent = fab.session_present ? (fab.needs_refresh ? "Expired / needs refresh" : "OK") : "No Fab session";
+    $("#fabSessionDays").textContent = fab.days_remaining != null ? String(fab.days_remaining) : "—";
+  } else {
+    $("#authStatusText").textContent = "Not signed in";
+    $("#authEpicState").textContent = "—";
+    $("#authEpicExpires").textContent = "—";
+    $("#fabSessionState").textContent = "—";
+    $("#fabSessionDays").textContent = "—";
+  }
+  let who = { display_name: "—", email: "—" };
+  try { const w = await api("/api/auth/whoami"); who = w.data || who; } catch (error) {}
+  $("#whoDisplayName").textContent = who.display_name || "—";
+  $("#whoEmail").textContent = who.email || "—";
+}
+
+/* Toast notification with optional spinner. Kind: info | success | error.
+   When kind is "loading" it shows a spinning wheel; on success it shows a
+   green check mark with "Done!". */
+function toast(msg, kind, anchorEl) {
+  const t = $("#toast");
+  if (!t) return;
+  const isLoading = kind === "loading";
+  const isSuccess = kind === "success";
+  t.textContent = "";
+  const icon = document.createElement("span");
+  icon.style.marginRight = "8px";
+  icon.style.fontSize = "14px";
+  if (isLoading) {
+    icon.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" style="display:inline-block;animation:rotate 1s linear infinite"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"/></svg>';
+    t.textContent = msg;
+    t.prepend(icon);
+    t.className = "toast loading show";
+    t.style.opacity = "1";
+    t.style.visibility = "visible";
+    t.style.display = "";
+    t.style.transform = "";
+    t.style.transition = "";
+    t.style.position = "fixed";
+    t.style.left = "50%";
+    t.style.bottom = "22px";
+    t.style.top = "auto";
+    t.style.transform = "translateX(-50%)";
+    clearTimeout(toast._timer);
+    return;
+  }
+  if (isSuccess) {
+    icon.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" style="display:inline-block"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    t.textContent = msg;
+    t.prepend(icon);
+    t.className = "toast success show";
+  } else if (kind === "error") {
+    icon.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" style="display:inline-block"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    t.textContent = msg;
+    t.prepend(icon);
+    t.className = "toast error show";
+  } else {
+    t.textContent = msg;
+    t.className = "toast info show";
+  }
+  t.style.opacity = "1";
+  t.style.visibility = "visible";
+  t.style.display = "";
+  t.style.transform = "";
+  t.style.transition = "";
+  t.style.position = "fixed";
+  t.style.left = "50%";
+  t.style.bottom = "22px";
+  t.style.top = "auto";
+  t.style.transform = "translateX(-50%)";
+  clearTimeout(toast._timer);
+  if (kind !== "error") {
+    toast._timer = setTimeout(() => { t.classList.remove("show"); }, 5000);
+  }
+}
+
+async function startLogin() {
+  toast("Starting Fab login (a browser window should open)…", "info");
+  const j = await api("/api/auth/login", { method: "POST", body: { manual: false } });
+  watchJob(j.job_id, async (res) => {
+    if (res.ok) { toast("Login finished. Checking status…", "info"); await refreshAuthTab(); }
+    else { toast("Login failed: " + (res.message || "unknown"), "error"); }
+  }, async (err) => { toast("Login failed: " + (err.message || "unknown"), "error"); });
+}
+
+async function doLogout() {
+  await api("/api/auth/logout", { method: "POST", body: {} });
+  await refreshAuthTab();
+  toast("Logged out", "info");
+}
+
 async function init() {
   document.querySelectorAll("[data-sort]").forEach((button) => button.addEventListener("click", () => {
     state.filters.sort = button.dataset.sort;
@@ -402,6 +571,8 @@ async function init() {
   $("#clearFilters").addEventListener("click", clearFilters);
   $("#btnHelp").addEventListener("click", () => $("#helpModal").classList.remove("hidden"));
   $("#helpModalClose").addEventListener("click", () => $("#helpModal").classList.add("hidden"));
+  $("#btnLogin").addEventListener("click", startLogin);
+  $("#btnLogout").addEventListener("click", doLogout);
   $("#resultsGrid").addEventListener("click", (event) => {
     const card = event.target.closest(".asset-card");
     if (card && card.dataset.uid) openDownloadModal(card.dataset.uid, card.dataset.title);
@@ -419,6 +590,21 @@ async function init() {
   $("#engineModalCancel").addEventListener("click", () => { $("#engineModal").classList.add("hidden"); state.pending = null; });
   $("#engineModalConfirm").addEventListener("click", confirmDownload);
   await loadLibrary();
+  await refreshAuthTab();
 }
+
+/* Expose the helpers the interaction-fix module (and DevTools console) needs.
+   interaction-fix captures card clicks in the capture phase and calls these
+   directly, so they must be reachable on window, otherwise clicking Download
+   silently does nothing. */
+window.api = api;
+window.state = state;
+window.openDownloadModal = openDownloadModal;
+window.addJobRow = addJobRow;
+window.watchJob = watchJob;
+window.openEventSource = openEventSource;
+window.fmtBytes = fmtBytes;
+window.toast = toast;
+window.slugify = slugify;
 
 document.addEventListener("DOMContentLoaded", init);

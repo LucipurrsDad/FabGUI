@@ -3,8 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#34373d">
   <title>FabGUI - Fab / Epic Games asset downloader</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v=glass-2">
+  <link rel="stylesheet" href="/static/appearance.css?v=glass-2">
   <link rel="icon" href="/static/fab.jpeg">
   <link rel="manifest" href="/static/manifest.json">
   <style>
@@ -29,6 +31,17 @@
   </style>
 </head>
 <body>
+  <svg class="background-lines" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+    <path class="line line-a" d="M-120 200 C220 60 430 340 720 210 S1180 70 1720 240" style="--ls:26s;--lc:14s;--op:0.65;--sw:1.0" />
+    <path class="line line-b" d="M-140 320 C260 140 470 490 790 310 S1260 130 1780 350" style="--ls:34s;--lc:16s;--op:0.5;--sw:1.2;animation-direction:reverse" />
+    <path class="line line-c" d="M-100 450 C300 270 520 620 860 440 S1320 260 1740 510" style="--ls:30s;--lc:15s;--op:0.6;--sw:0.9;animation-delay:3s" />
+    <path class="line line-d" d="M-160 580 C240 400 500 760 880 570 S1360 410 1800 630" style="--ls:38s;--lc:18s;--op:0.55;--sw:1.1;animation-direction:reverse;animation-delay:6s" />
+    <path class="line line-e" d="M-110 720 C320 520 560 920 940 710 S1420 500 1760 780" style="--ls:32s;--lc:16s;--op:0.5;--sw:1.0;animation-delay:9s" />
+    <path class="line line-f" d="M-130 860 C360 640 620 1040 1000 830 S1460 620 1820 900" style="--ls:40s;--lc:19s;--op:0.45;--sw:1.3;animation-direction:reverse;animation-delay:12s" />
+    <path class="line line-g" d="M-90 260 C200 100 380 380 660 250 S1100 90 1660 270" style="--ls:28s;--lc:14s;--op:0.58;--sw:0.8;animation-delay:15s" />
+    <path class="line line-h" d="M-110 500 C280 300 500 660 820 480 S1300 280 1780 540" style="--ls:42s;--lc:20s;--op:0.48;--sw:1.0;animation-direction:reverse;animation-delay:18s" />
+  </svg>
+  <div class="background-scrim" aria-hidden="true"></div>
   <header class="top">
     <div class="brand"><img src="/static/fab.jpeg" class="brand-img" alt="">Fab<em>GUI</em></div>
     <nav class="header-sort-tabs" role="group" aria-label="Sort owned library">
@@ -37,12 +50,41 @@
     </nav>
     <div class="header-actions">
       <div class="save-location"><span class="save-label">Save to</span><span id="saveLocationText" class="save-path">~/Downloads</span></div>
+      <details class="appearance-menu" id="appearanceMenu">
+        <summary class="btn ghost" aria-label="Appearance settings">Appearance</summary>
+        <section class="appearance-popover" aria-label="Appearance settings">
+          <h2>Liquid glass</h2>
+          <p class="appearance-description">Tune the animated lines and neutral grey glass. Your choices stay in this browser.</p>
+          <label class="appearance-check"><input id="wallpaperEnabled" type="checkbox" checked> Use animated line background</label>
+          <div class="appearance-status" id="wallpaperStatus" role="status">Slow flowing glass lines</div>
+          <label class="appearance-range-label" for="glassTint"><span>Glass tint</span><output id="glassTintValue">24%</output></label>
+          <input id="glassTint" class="appearance-range" type="range" min="0" max="75" step="1" value="24">
+          <p class="appearance-hint">Higher tint strength means less transparent glass. The tint stays neutral grey.</p>
+          <label class="appearance-range-label" for="glassFrost"><span>Softness</span><output id="glassFrostValue">0.5</output></label>
+          <input id="glassFrost" class="appearance-range" type="range" min="0" max="4" step="0.1" value="0.5">
+          <div class="appearance-kind">
+            <label><input type="radio" name="wallpaperKind" value="lines" checked> Lines</label>
+            <label><input type="radio" name="wallpaperKind" value="video"> Video</label>
+          </div>
+          <div class="appearance-video">
+            <input id="videoFile" type="file" accept="video/*"> Use your own video as background
+          </div>
+          <label class="appearance-range-label" for="glassIndex"><span>Refraction index</span><output id="glassIndexValue">1.33</output></label>
+          <input id="glassIndex" class="appearance-range" type="range" min="1.0" max="2.5" step="0.01" value="1.33">
+          <label class="appearance-range-label" for="glassStrength"><span>Refraction strength</span><output id="glassStrengthValue">5%</output></label>
+          <input id="glassStrength" class="appearance-range" type="range" min="0" max="1" step="0.01" value="0.05">
+          <p class="appearance-hint">Index bends light at the glass edge; strength controls how much refraction is applied. Keep both low for clear glass.</p>
+          <label class="appearance-range-label" for="wallpaperDim"><span>Background dimming</span><output id="wallpaperDimValue">24%</output></label>
+          <input id="wallpaperDim" class="appearance-range" type="range" min="0" max="70" step="1" value="24">
+          <button id="resetAppearance" class="btn small" type="button">Reset appearance</button>
+        </section>
+      </details>
       <button id="btnHelp" class="btn ghost">Help</button>
     </div>
   </header>
   <main>
     <section id="tab-search" class="tab-panel active">
-      <div class="panel">
+      <div class="panel" id="libraryPanel">
         <div class="library-tools" aria-label="Library search and filters">
           <div class="library-tool-row library-filters">
             <input id="librarySearch" class="input library-search" type="search" placeholder="Search titles, categories…" aria-label="Search owned assets">
@@ -59,10 +101,56 @@
           <div id="resultsLoading" class="placeholder hidden"><span class="spinner"></span>Loading…</div>
           <div id="resultsGrid" class="hidden results-grid"></div>
         </div>
+
+        <div class="library-tools" aria-label="Download progress" style="margin-top:14px;">
+          <div class="library-tool-row library-filters">
+            <h3 style="margin:0;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;">Downloads</h3>
+            <div class="table-wrap" style="margin-top:8px;max-height:220px;overflow-y:auto;">
+              <table id="jobsTable">
+                <thead>
+                  <tr>
+                    <th style="width:22px;"></th>
+                    <th>Asset</th>
+                    <th style="width:130px;">Status</th>
+                    <th style="width:120px;">Progress</th>
+                  </tr>
+                </thead>
+                <tbody id="jobsBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-auth" class="tab-panel">
+      <div class="panel">
+        <h2>Authentication</h2>
+        <p>Status: <strong id="authStatusText">—</strong></p>
+        <div class="auth-grid">
+          <div class="auth-card">
+            <h4>Epic session</h4>
+            <div class="kv"><span class="k">Authenticated</span><span id="authEpicState">—</span></div>
+            <div class="kv"><span class="k">Expires</span><span id="authEpicExpires">—</span></div>
+          </div>
+          <div class="auth-card">
+            <h4>Fab session</h4>
+            <div class="kv"><span class="k">Status</span><span id="fabSessionState">—</span></div>
+            <div class="kv"><span class="k">Days remaining</span><span id="fabSessionDays">—</span></div>
+          </div>
+          <div class="auth-card">
+            <h4>Account</h4>
+            <div class="kv"><span class="k">Display name</span><span id="whoDisplayName">—</span></div>
+            <div class="kv"><span class="k">Email</span><span id="whoEmail">—</span></div>
+          </div>
+        </div>
+        <div class="auth-actions">
+          <button id="btnLogin" class="btn primary">Sign in with Epic / Fab</button>
+          <button id="btnLogout" class="btn danger">Sign out</button>
+        </div>
       </div>
     </section>
   </main>
-
   <div id="engineModal" class="modal hidden">
     <div class="modal-card">
       <h3 id="engineModalTitle">Download asset</h3>
@@ -71,13 +159,9 @@
         <label>Unreal Engine version<select id="engineSelect" class="input"></select></label>
         <label>Target platform<select id="downloadPlatformSelect" class="input"></select></label>
       </div>
-      <div class="modal-actions">
-        <button id="engineModalCancel" class="btn ghost">Cancel</button>
-        <button id="engineModalConfirm" class="btn primary">Download</button>
-      </div>
+      <div class="modal-actions"><button id="engineModalCancel" class="btn ghost">Cancel</button><button id="engineModalConfirm" class="btn primary">Download</button></div>
     </div>
   </div>
-
   <div id="helpModal" class="modal hidden">
     <div class="modal-card">
       <h3>How to use FabGUI</h3>
@@ -91,7 +175,9 @@
     </div>
   </div>
   <div id="toast" class="toast"></div>
-  <script src="/static/app.js"></script>
-  <script src="/static/engine-sort.js"></script>
+  <script src="/static/app.js?v=glass-2"></script>
+  <script src="/static/engine-sort.js?v=glass-2"></script>
+  <script type="module" src="/static/appearance.js?v=glass-2"></script>
+  <script src="/static/interaction-fix.js?v=glass-2"></script>
 </body>
 </html>
