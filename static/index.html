@@ -3,8 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#34373d">
   <title>FabGUI - Fab / Epic Games asset downloader</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v=glass-1">
+  <link rel="stylesheet" href="/static/appearance.css?v=glass-1">
   <link rel="icon" href="/static/fab.jpeg">
   <link rel="manifest" href="/static/manifest.json">
   <style>
@@ -29,6 +31,8 @@
   </style>
 </head>
 <body>
+  <video id="backgroundVideo" class="background-video" autoplay loop muted playsinline aria-hidden="true"></video>
+  <div class="background-scrim" aria-hidden="true"></div>
   <header class="top">
     <div class="brand"><img src="/static/fab.jpeg" class="brand-img" alt="">Fab<em>GUI</em></div>
     <nav class="header-sort-tabs" role="group" aria-label="Sort owned library">
@@ -37,12 +41,32 @@
     </nav>
     <div class="header-actions">
       <div class="save-location"><span class="save-label">Save to</span><span id="saveLocationText" class="save-path">~/Downloads</span></div>
+      <details class="appearance-menu" id="appearanceMenu">
+        <summary class="btn ghost" aria-label="Appearance settings">Appearance</summary>
+        <section class="appearance-popover" aria-label="Appearance settings">
+          <h2>Liquid glass</h2>
+          <p class="appearance-description">Personalize the animated wallpaper and neutral glass tint. Your choices stay in this browser.</p>
+          <label class="appearance-check"><input id="wallpaperEnabled" type="checkbox" checked> Use video wallpaper</label>
+          <label class="appearance-field">Choose a video from this device
+            <input id="wallpaperFile" type="file" accept="video/*">
+          </label>
+          <div class="appearance-status" id="wallpaperStatus" role="status">Choose a video to use as your wallpaper.</div>
+          <label class="appearance-range-label" for="glassTint"><span>Glass tint</span><output id="glassTintValue">36%</output></label>
+          <input id="glassTint" class="appearance-range" type="range" min="0" max="75" step="1" value="36">
+          <p class="appearance-hint">Higher tint strength means less transparent glass. The tint stays neutral grey.</p>
+          <label class="appearance-range-label" for="glassFrost"><span>Softness</span><output id="glassFrostValue">2</output></label>
+          <input id="glassFrost" class="appearance-range" type="range" min="0" max="8" step="0.5" value="2">
+          <label class="appearance-range-label" for="wallpaperDim"><span>Wallpaper dimming</span><output id="wallpaperDimValue">24%</output></label>
+          <input id="wallpaperDim" class="appearance-range" type="range" min="0" max="70" step="1" value="24">
+          <button id="resetAppearance" class="btn small" type="button">Reset appearance</button>
+        </section>
+      </details>
       <button id="btnHelp" class="btn ghost">Help</button>
     </div>
   </header>
   <main>
     <section id="tab-search" class="tab-panel active">
-      <div class="panel">
+      <div class="panel" id="libraryPanel">
         <div class="library-tools" aria-label="Library search and filters">
           <div class="library-tool-row library-filters">
             <input id="librarySearch" class="input library-search" type="search" placeholder="Search titles, categories…" aria-label="Search owned assets">
@@ -91,7 +115,8 @@
     </div>
   </div>
   <div id="toast" class="toast"></div>
-  <script src="/static/app.js"></script>
-  <script src="/static/engine-sort.js"></script>
+  <script src="/static/app.js?v=glass-1"></script>
+  <script src="/static/engine-sort.js?v=glass-1"></script>
+  <script type="module" src="/static/appearance.js?v=glass-1"></script>
 </body>
 </html>
