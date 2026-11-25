@@ -1,5 +1,4 @@
 # FabGUI
-<img width="3840" height="2100" alt="Screenshot_20261123_192500" src="https://github.com/user-attachments/assets/88e010c3-e3d4-4f49-b7fb-7995d85e0cb7" />
 
 A self-hosted web app for [FabCLI](https://github.com/zirklerite/FabCLI), the Epic Games / Fab asset downloader for Linux. FabGUI turns your owned Fab library into a searchable, sortable visual catalog, with direct download and authentication controls.
 
@@ -9,13 +8,13 @@ A self-hosted web app for [FabCLI](https://github.com/zirklerite/FabCLI), the Ep
 - **Header sort tabs** — switch between **Latest engine** (highest Unreal Engine version listed first) and **A–Z**. The tabs are centered in the page header and the selected sort is remembered.
 - **Search and filters** — search titles, categories, IDs, and descriptions; filter by engine version, Fab category, distribution format, and target platform. Filter options and counts are built from the current `fabcli library` response.
 - **At-a-glance metadata** — cards show the latest listed engine version, category, and distribution format.
-- **Download** — click a card to open the download prompt (engine version, platform, target folder).
+- **Download** — click a card to open the download prompt (engine version, platform, target folder). Progress bar shows download status; toast shows spinner while downloading and green "Done!" when complete.
 - **Copy listing UID** — right-click a card to copy its Fab listing UID.
 - **Authentication** — sign in or out and view Epic/Fab session and account status (auth panel at the bottom of the page).
-- **Appearance / liquid glass** — animated procedural line background plus a glass lens over the library. Tunable glass tint, softness (frost), refraction, and background dimming; choices persist in browser localStorage.
+- **Appearance / liquid glass** — animated procedural line background plus global frosted glass over every element. Tunable glass tint, glass frost (blur applied to all glass elements), refraction index + strength, background dimming, and wallpaper choices (lines, custom video, or bundled dark/light wallpapers). Choices persist in browser localStorage.
 - **Remembered view** — search, filters, and sort selection persist in browser local storage.
 
-Fab's categories and distribution metadata can be broad or change upstream. The highest listed engine version is a sorting convenience; it does not mean every item is a complete Unreal project. FabGUI lists items returned by FabCLI's owned library and does not currently filter projects from other asset types by a separate project-only flag.
+Fab's categories and distribution metadata can be broad and change upstream. The highest listed engine version is a sorting convenience; it does not mean every item is a complete Unreal project. FabGUI lists items returned by FabCLI's owned library and does not currently filter projects from other asset types by a separate project-only flag.
 
 ## Platform support
 
@@ -24,8 +23,10 @@ The included installer targets **Arch Linux, CachyOS, and other Arch-based distr
 FabGUI requires Python 3.8+ (standard library only) and FabCLI. FabCLI's Linux WebView needs the following Arch packages:
 
 ```bash
-sudo pacman -S --needed webkit2gtk-4.1 harfbuzz-icu libmanette hyphen
+sudo pacman -S --needed webkit2gtk-4.1 harfbuzz-icu libmanette hyphen ffmpeg
 ```
+
+`ffmpeg` is used for video background playback.
 
 If FabCLI is installed in `~/.local/bin`, make sure that path is in your shell PATH. For Bash:
 
@@ -54,7 +55,7 @@ chmod +x install.sh
 ./install.sh
 ```
 
-The installer checks for `pacman`, installs FabCLI's runtime packages, copies FabGUI to `~/.local/share/fabgui`, writes a systemd user unit, and enables and starts the service. It preserves an existing `settings.json`. It invokes `sudo` for `pacman`; do not run the installer itself with `sudo`.
+The installer checks for `pacman`, installs FabCLI's runtime packages (including `ffmpeg`), copies FabGUI to `~/.local/share/fabgui`, writes a systemd user unit, and enables and starts the service. It preserves an existing `settings.json`. It invokes `sudo` for `pacman`; do not run the installer itself with `sudo`.
 
 Open <http://127.0.0.1:8000> after installation.
 
@@ -66,7 +67,7 @@ No Git checkout is needed to update an existing installation. Run this as the ac
 curl -fsSL https://raw.githubusercontent.com/LucipurrsDad/FabGUI/main/update.sh | bash
 ```
 
-The updater downloads the latest public `main` archive, replaces the installed `server.py` and `static/` files in `~/.local/share/fabgui`, leaves settings intact, and restarts the `fabgui.service` user unit if present. To use a non-default install directory, set `FABGUI_DIR` before running the updater. Hard-refresh the browser (Ctrl+F5) if it still displays cached files.
+The updater downloads the latest public `main` archive, replaces the installed `server.py`, `static/`, and `backgrounds/` files in `~/.local/share/fabgui`, leaves settings intact, and restarts the `fabgui.service` user unit if present. To use a non-default install directory, set `FABGUI_DIR` before running the updater. Hard-refresh the browser (Ctrl+F5) if it still displays cached files.
 
 ## Run and troubleshoot
 
@@ -107,9 +108,11 @@ Click **Appearance** in the header to open the liquid-glass panel. Choices are s
 
 - **Use animated line background** — toggle the flowing procedural glass lines behind the page.
 - **Glass tint** — neutral grey tint strength (0–75%). Higher means less transparent glass.
-- **Softness (frost)** — surface blur of the glass lens (0–4). Lower = clearer glass.
-- **Refraction** — light bending at the glass edge (0–1). `0` disables refraction; higher values bend light more while staying clear.
+- **Glass frost** — global frosted glass blur applied to every glass element (header, panels, cards, modal, toast, popover). 0 = crystal clear; higher = more blur.
+- **Refraction index** — IOR (index of refraction) at the glass edge. `1.00` = no bending; higher values bend light more.
+- **Refraction strength** — how much refraction offset is applied (0–100%). `0` = flat glass; higher = stronger lens effect. Refraction applies to cards and header.
 - **Background dimming** — dims the page background behind the glass (0–70%).
+- **Wallpaper** — choose **Lines** (animated procedural glass lines), **Video** (play your own video file), **Dark wallpaper**, or **Light wallpaper** (bundled Gold-Gate images).
 
 The glass lens uses [liquid-gl](https://github.com/naughtyduk/liquidGL) (v3.0.0, MIT) loaded from jsDelivr at runtime. The liquidGL source is not vendored in this repository; see `static/LIQUIDGL-NOTICE.txt`. If liquidGL fails to load, the page falls back to plain CSS glass styling.
 
@@ -124,6 +127,8 @@ The glass lens uses [liquid-gl](https://github.com/naughtyduk/liquidGL) (v3.0.0,
 - `static/interaction-fix.js` — click handling so the download dialog opens over the glass canvas.
 - `static/engine-sort.js` — engine-cap filter/sort overrides.
 - `static/LIQUIDGL-NOTICE.txt` — liquidGL license/CDN notice.
+- `static/backgrounds/` — bundled wallpaper images (Gold-Gate light/dark).
+- `backgrounds/` — project source wallpapers (synced to static/backgrounds/).
 - `settings.json` — runtime settings.
 - `install.sh` — Arch/CachyOS installer.
 - `update.sh` — updater for the latest public `main` version.

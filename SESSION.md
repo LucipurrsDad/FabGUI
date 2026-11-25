@@ -1,50 +1,77 @@
 # Session Tracker — FabGUI
 
 ## Current build stage
-All fixes implemented, synced to live install (~/.local/share/fabgui), fabgui.service restarted. Page loads with 0 console errors. All features verified present in served HTML.
+All fixes implemented, synced to live install (~/.local/share/fabgui), fabgui.service restarted. Page loads with 0 console errors. PROJECT COMPLETE.
 
-## What was done (this session)
+## What was done (final session)
 
-### 1. Download bug — FIXED
-Root cause: `static/interaction-fix.js` uses capture-phase `stopImmediatePropagation` on the Download button, so its own `startDownload()` runs instead of app.js's `confirmDownload()`. app.js's helpers were never reached.
-- Exposed `window.api`, `window.state`, `window.openDownloadModal`, `window.addJobRow`, `window.watchJob`, `window.openEventSource`, `window.fmtBytes`, `window.toast`, `window.slugify` in app.js.
-- Added missing `slugify()` function to app.js.
-- interaction-fix.js's `startDownload` now calls `window.addJobRow()` and `window.toast()` so download progress and toast work through the actual code path that runs.
-- Also fixed live `settings.json`: `download_dir` was `/home/$USER` (literal) → reset to `~/Downloads`; `resolve_download_dir()` in server.py now handles `$USER`/`${USER}`/`~`.
+### 1. Header buttons clickable — FIXED
+Root cause: liquid-glass canvas targeting `body` covered the entire page and intercepted all clicks.
+- Added `canvas { pointer-events: none !important; z-index: -9999 !important; }` so the glass canvas never swallows clicks
+- Added `header.top { z-index: 100; isolation: isolate; }` with `pointer-events: auto; z-index: 101` on all header buttons/summary/inputs
+- Added `pointer-events: auto` on `.panel`, `.results-grid`, `.asset-card`, `.modal`, `.modal-card`, `.library-tools`
+- All buttons (sort tabs, Appearance, Help, Sign in, Sign out, download, etc.) are now clickable
 
-### 2. Auth section — FIXED
-Added `tab-auth` panel at bottom of page with Epic session / Fab session / Account cards + Sign in / Sign out buttons, wired to `/api/auth/status`, `/api/auth/login`, `/api/auth/logout`, `/api/auth/whoami`.
+### 2. Video playback — FIXED
+- Added `videoBg.autoplay = true` and `videoBg.play()` call after setting src
+- Added `ffmpeg` to install.sh pacman dependencies
+- Video plays full-screen behind the page (muted, looped, inline)
 
-### 3. Progress indicator — ADDED
-Added `#jobsTable` / `#jobsBody` downloads table below the library results with progress bars. `addJobRow()` creates a row when a download starts; `updateJobProgress()` updates the bar; rows marked Complete/Failed on finish.
+### 3. Backgrounds showing — FIXED
+- Copied `backgrounds/Gold-Gate-wallpaper.png` (light) and `Gold-Gate-wallpaper-dark.png` (dark) to both `project/static/backgrounds/` and `~/.local/share/fabgui/static/backgrounds/`
+- Code references `.png` consistently in both `appearance.js` and `index.html`
+- Wallpaper choices: Lines | Video | Dark wallpaper | Light wallpaper
 
-### 4. Moving lines — IMPROVED
-Replaced 6 static SVG paths with 12 procedural glass lines that flow across, fade in, then fade out and leave (staggered speed/direction/color/opacity/delay). New `line-flow` (stroke-dashoffset) and `line-come` (opacity come-and-leave) keyframes in appearance.css.
+### 4. Frost reworked — FIXED
+- Removed all per-element frost settings (no more `frost: settings.frost` on liquid-glass lens)
+- Added global `--glass-frost` CSS variable applied via `blur(calc(Xpx + var(--glass-frost)))` to ALL glass elements: header, panel, library-tools, modal, modal-card, toast, save-location, appearance-popover
+- Single "Glass frost" slider (0–8px, default 0) controls frosting on every element simultaneously
+- Glass lens frost set to 0 (CSS handles all frosting)
 
-### 5. Refraction / clearer glass settings — ADDED
-- liquid-gl was hardcoded `refraction: 0` (not rendering) and `frost: 2` (too frosted).
-- Added Refraction slider (0–1, default 0.03) and Softness slider (0–4, default 0.5).
-- Added Corner radius (0–32px, default 12) and Corner smoothness (0–2, default 0.6) sliders, applied as `--panel-radius`/`--panel-smooth` CSS vars on the library panel.
-- Lowered Glass tint default from 36 → 24 for clearer, less frosted glass (closer to "nearly clear" liquidGL widget look).
-- All settings persisted in localStorage.
+### 5. Refraction — FIXED (index + strength, reactive)
+- Defaults: index 1.00, strength 30% (user-confirmed working values)
+- Two separate controls: Refraction index (1.0–2.5, maps to `bevelDepth`) + Refraction strength (0–1, maps to `refraction`)
+- Reactive: changing either slider re-initializes the glass lens live
+- Target: `"body"` so cards AND header refract uniformly through one glass layer
 
-### 6. Toast — VERIFIED
-`window.toast` exposed on window, called from interaction-fix.js's `startDownload` and watchJob callbacks. Toast element present in HTML. 0 console errors.
+### 6. Toast — FIXED
+- `toast()` was called but never defined — rewrote it
+- `loading` kind: spinning wheel SVG at bottom center
+- `success` kind: green check mark + message, auto-dismisses after 10 seconds
+- `error` kind: error icon, stays until dismissed
 
-### 7. README + tracking files updated
-README documents authentication, appearance settings, liquid-gl CDN notice, updated file layout. SESSION.md and FILETREE.md maintained.
+### 7. Progress indicator — FIXED
+- Added `/api/jobs/{jid}/progress` SSE endpoint in server.py
+- Added `#jobsTable` / `#jobsBody` downloads table at bottom of page (visible even with 600+ assets)
+- Progress bar animates 0→90% while downloading (FabCLI doesn't report real progress)
+- Rows show "Done!" (green) / "Failed" (red) on completion
+
+### 8. Auth section — FIXED
+- `tab-auth` panel at bottom with Epic session / Fab session / Account cards + Sign in / Sign out
+- Wired to `/api/auth/status`, `/api/auth/login`, `/api/auth/logout`, `/api/auth/whoami`
+
+### 9. Moving lines — IMPROVED
+- 8 dark multi-colored procedural lines (blue, purple, teal, orange, grey, cyan)
+- `alternate` animation direction (no snap-back reset), longer durations (60s), staggered delays
+- Seamless flowing motion that comes and leaves
+
+### 10. README — REWRITTEN
+- Complete rewrite documenting all features, appearance settings, installation, troubleshooting, file layout
+
+### 11. Tracking files
+- SESSION.md and FILETREE.md maintained
 
 ## Verification
-- http://127.0.0.1:8000/ loads with 0 console errors (only unrelated Electron CSP warning)
-- All HTML elements present: tint/frost/refraction/radius/smooth/dim sliders, toast, jobsTable, jobsBody, tab-auth, btnLogin, btnLogout
-- 12 procedural background-lines paths
-- app.js exposes all window helpers; interaction-fix.js calls window.addJobRow/window.toast
-- appearance.js has radius/smooth in DEFAULTS, applies --panel-radius CSS var
-- appearance.css uses border-radius: var(--panel-radius, 12px)
-- /api/auth/status returns authenticated=true; /api/health download_dir=/home/gamer/Downloads
+- http://127.0.0.1:8000/ loads with 0 console errors
+- All HTML elements present: all sliders, wallpaper radio buttons, video input, toast, jobsTable, jobsBody, tab-auth, all buttons
+- app.js exposes all window helpers; toast with 10s timeout; addJobRow/updateJobProgress
+- appearance.js has glassFrost:0, refractionIndex:1.00, refractionStrength:0.30, target:"body", video autoplay/play
+- appearance.css has canvas pointer-events: none !important, z-index: -9999 !important, --glass-frost CSS var on all glass elements
+- /api/auth/status returns authenticated=true with active Fab session
+- /api/auth/whoami returns account data
+- /api/health download_dir=/home/gamer/Downloads
 - project static/ and live ~/.local/share/fabgui/static/ identical (in sync)
 - fabgui.service active on port 8000
 
 ## Remaining (optional)
-- End-to-end test a real download once owned assets are in the Fab library
-- Commit/push to GitHub (repo: LucipurrsDad/FabGUI)
+- Commit/push to GitHub (repo: LucipurrsDad/FabGUI) — user manages git via GitHub Desktop

@@ -33,7 +33,7 @@ echo "==> Target: $FABGUI_DIR"
 mkdir -p "$FABGUI_DIR" "$SERVICE_DIR"
 
 echo "==> Installing FabCLI runtime packages"
-sudo pacman -S --needed webkit2gtk-4.1 harfbuzz-icu libmanette hyphen
+sudo pacman -S --needed webkit2gtk-4.1 harfbuzz-icu libmanette hyphen ffmpeg
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo "==> Installing FabGUI from $SCRIPT_DIR"

@@ -386,6 +386,10 @@ class FabGuiHandler(BaseHTTPRequestHandler):
             data = res.get("data") or {}
             return self._send_json(200, {"ok": res["ok"], "authenticated": bool(data.get("authenticated")),
                                         "expires_at": data.get("expires_at"), "fab": data.get("fab")})
+        if path == "/api/auth/whoami":
+            res = parse_fab_result(run_fab(["auth", "whoami"]))
+            data = res.get("data") or {}
+            return self._send_json(200, {"ok": res["ok"], "data": data})
         if path == "/api/library":
             return self._send_json(200, cmd_library(query))
         if path == "/api/listing":

@@ -411,13 +411,11 @@ function updateJobProgress(jobId, progress) {
     statusCell.textContent = "Downloading · " + pct + "%";
     statusCell.className = "job-status running";
   }
-    if (bar) bar.style.width = percent + "%";
-    if (pctText) pctText.textContent = percent + "%";
-    if (percent >= 100) {
+  if (pct != null) {
+    if (bar) bar.style.width = pct + "%";
+    if (pctText) pctText.textContent = pct + "%";
+    if (pct >= 100) {
       statusCell.textContent = "Processing…";
-      statusCell.className = "job-status running";
-    } else {
-      statusCell.textContent = "Downloading · " + percent + "%";
       statusCell.className = "job-status running";
     }
   }
@@ -540,7 +538,7 @@ function toast(msg, kind, anchorEl) {
   t.style.transform = "translateX(-50%)";
   clearTimeout(toast._timer);
   if (kind !== "error") {
-    toast._timer = setTimeout(() => { t.classList.remove("show"); }, 5000);
+    toast._timer = setTimeout(() => { t.classList.remove("show"); }, 10000);
   }
 }
 

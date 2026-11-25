@@ -1,11 +1,11 @@
 const STORAGE_KEY = "fabgui.appearance.v1";
 const DEFAULTS = {
   wallpaperEnabled: true,
-  wallpaperKind: "lines",   // "lines" | "video"
+  wallpaperKind: "lines",   // "lines" | "video" | "dark-bg" | "light-bg"
   tint: 24,
-  frost: 0.5,
-  refractionIndex: 1.33,    // IOR (index of refraction)
-  refractionStrength: 0.05, // how much refraction is applied
+  glassFrost: 0,            // global frosted glass blur applied to all glass elements (px)
+  refractionIndex: 1.00,    // IOR (index of refraction)
+  refractionStrength: 0.30, // how much refraction is applied (30%)
   dim: 24,
   videoSrc: "",
 };
@@ -25,7 +25,7 @@ function loadSettings() {
       wallpaperEnabled: stored.wallpaperEnabled !== false,
       wallpaperKind: stored.wallpaperKind || DEFAULTS.wallpaperKind,
       tint: clamp(stored.tint, 0, 75, DEFAULTS.tint),
-      frost: clamp(stored.frost, 0, 4, DEFAULTS.frost),
+      glassFrost: clamp(stored.glassFrost, 0, 8, DEFAULTS.glassFrost),
       refractionIndex: clamp(stored.refractionIndex, 1.0, 2.5, DEFAULTS.refractionIndex),
       refractionStrength: clamp(stored.refractionStrength, 0, 1, DEFAULTS.refractionStrength),
       dim: clamp(stored.dim, 0, 70, DEFAULTS.dim),
@@ -41,16 +41,27 @@ function updateBackground() {
   document.documentElement.style.setProperty("--wallpaper-dim", (settings.dim / 100).toFixed(2));
   document.documentElement.style.setProperty("--line-opacity", enabled ? "0.7" : "0.3");
   document.documentElement.style.setProperty("--line-speed", enabled ? "24s" : "0s");
+  document.documentElement.style.setProperty("--glass-frost", settings.glassFrost + "px");
   const body = document.body;
-  if (settings.wallpaperKind === "video" && settings.videoSrc) {
-    body.classList.add("has-video-bg");
-    if (videoBg) {
-      videoBg.src = settings.videoSrc;
-      videoBg.style.display = "block";
-    }
+  if (settings.wallpaperKind === "dark-bg") {
+    body.classList.add("has-dark-bg");
+    body.classList.remove("has-light-bg", "has-video-bg");
+    body.style.setProperty("--bg-image", "url('/static/backgrounds/Gold-Gate-wallpaper-dark.png')");
+  } else if (settings.wallpaperKind === "light-bg") {
+    body.classList.add("has-light-bg");
+    body.classList.remove("has-dark-bg", "has-video-bg");
+    body.style.setProperty("--bg-image", "url('/static/backgrounds/Gold-Gate-wallpaper.png')");
   } else {
-    body.classList.remove("has-video-bg");
-    if (videoBg) videoBg.style.display = "none";
+    body.classList.remove("has-dark-bg", "has-light-bg", "has-video-bg");
+    body.style.removeProperty("--bg-image");
+  }
+  if (settings.wallpaperKind === "video" && settings.videoSrc && videoBg) {
+    body.classList.add("has-video-bg");
+    videoBg.src = settings.videoSrc;
+    videoBg.style.display = "block";
+    try { videoBg.play().catch(() => {}); } catch (e) {}
+  } else if (videoBg) {
+    videoBg.style.display = "none";
   }
   document.documentElement.classList.toggle("lines-bg", settings.wallpaperKind !== "video");
 }
@@ -58,8 +69,8 @@ function renderSettings() {
   $("#wallpaperEnabled").checked = settings.wallpaperEnabled;
   $("#glassTint").value = settings.tint;
   $("#glassTintValue").value = `${settings.tint}%`;
-  $("#glassFrost").value = settings.frost;
-  $("#glassFrostValue").value = String(settings.frost);
+  $("#glassFrost").value = settings.glassFrost;
+  $("#glassFrostValue").value = settings.glassFrost.toFixed(1);
   $("#glassIndex").value = settings.refractionIndex;
   $("#glassIndexValue").value = settings.refractionIndex.toFixed(2);
   $("#glassStrength").value = settings.refractionStrength;
@@ -74,9 +85,7 @@ function renderSettings() {
     try {
       glassLens.setTint(tintValue());
       if (glassLens.options) {
-        glassLens.options.frost = settings.frost;
-        // index -> bevelDepth (how far light bends at edge)
-        // strength -> refraction (how much offset is applied)
+        glassLens.options.frost = 0;
         glassLens.options.bevelDepth = settings.refractionIndex - 1.0;
         glassLens.options.refraction = settings.refractionStrength * 0.5;
       }
@@ -85,13 +94,20 @@ function renderSettings() {
   }
   updateBackground(); saveSettings();
 }
+function destroyGlass() {
+  if (glassLens) {
+    try { glassLens.destroy(); } catch (error) {}
+    glassLens = null;
+  }
+}
 function initializeGlass() {
-  if (glassLens || !window.liquidGLFactory) return;
+  destroyGlass();
+  if (!window.liquidGLFactory) return;
   try {
     glassLens = window.liquidGLFactory({
-      engine: "auto", snapshot: "body", target: "#libraryPanel", content: false,
+      engine: "auto", snapshot: "body", target: "body", content: false,
       resolution: 1.25, zIndex: 1, refraction: settings.refractionStrength * 0.5, aberration: 0,
-      bevelDepth: settings.refractionIndex - 1.0, bevelWidth: 0.211, frost: settings.frost,
+      bevelDepth: settings.refractionIndex - 1.0, bevelWidth: 0.211, frost: 0,
       shadow: true, specular: true, reveal: "fade", tilt: false,
       draggable: false, magnify: 1, tint: tintValue(), helper: false,
     });
@@ -103,14 +119,19 @@ function bindSettings() {
     el.addEventListener("change", (event) => { settings.wallpaperKind = event.target.value; renderSettings(); });
   });
   $("#glassTint").addEventListener("input", (event) => { settings.tint = clamp(event.target.value, 0, 75, DEFAULTS.tint); renderSettings(); });
-  $("#glassFrost").addEventListener("input", (event) => { settings.frost = clamp(event.target.value, 0, 4, DEFAULTS.frost); renderSettings(); });
+  $("#glassFrost").addEventListener("input", (event) => {
+    settings.glassFrost = clamp(event.target.value, 0, 8, DEFAULTS.glassFrost);
+    renderSettings();
+  });
   $("#glassIndex").addEventListener("input", (event) => {
     settings.refractionIndex = clamp(event.target.value, 1.0, 2.5, DEFAULTS.refractionIndex);
     renderSettings();
+    initializeGlass();
   });
   $("#glassStrength").addEventListener("input", (event) => {
     settings.refractionStrength = clamp(event.target.value, 0, 1, DEFAULTS.refractionStrength);
     renderSettings();
+    initializeGlass();
   });
   $("#wallpaperDim").addEventListener("input", (event) => { settings.dim = clamp(event.target.value, 0, 70, DEFAULTS.dim); renderSettings(); });
   $("#videoFile").addEventListener("change", (event) => {
@@ -124,18 +145,19 @@ function bindSettings() {
   $("#resetAppearance").addEventListener("click", () => {
     settings = { ...DEFAULTS };
     renderSettings();
+    initializeGlass();
     $("#wallpaperStatus").textContent = "Slow flowing glass lines";
   });
   document.addEventListener("click", (event) => { const menu = $("#appearanceMenu"); if (menu.open && !menu.contains(event.target)) menu.open = false; });
 }
 async function bootAppearance() {
   loadSettings(); bindSettings(); renderSettings();
-  // Create the video background element (hidden by default)
   videoBg = document.createElement("video");
   videoBg.id = "videoWallpaper";
   videoBg.muted = true;
   videoBg.loop = true;
   videoBg.playsInline = true;
+  videoBg.autoplay = true;
   videoBg.style.display = "none";
   videoBg.style.position = "fixed";
   videoBg.style.inset = "0";
@@ -143,6 +165,7 @@ async function bootAppearance() {
   videoBg.style.height = "100vh";
   videoBg.style.objectFit = "cover";
   videoBg.style.zIndex = "-3";
+  videoBg.style.pointerEvents = "none";
   document.body.appendChild(videoBg);
   try {
     const { default: liquidGL } = await import("https://cdn.jsdelivr.net/npm/liquid-gl@3.0.0/liquidGL.js");
