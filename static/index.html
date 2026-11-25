@@ -5,18 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#34373d">
   <title>FabGUI - Fab / Epic Games asset downloader</title>
-  <link rel="stylesheet" href="/static/style.css?v=glass-2">
-  <link rel="stylesheet" href="/static/appearance.css?v=glass-2">
+  <link rel="stylesheet" href="/static/style.css?v=glass-5">
+  <link rel="stylesheet" href="/static/appearance.css?v=glass-5">
   <link rel="icon" href="/static/fab.jpeg">
   <link rel="manifest" href="/static/manifest.json">
   <style>
-    header.top { position: sticky; top: 0; z-index: 20; display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); align-items: center; }
+    header.top { position: sticky; top: 0; z-index: 200; display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); align-items: center; }
     .header-sort-tabs { grid-column: 2; display: flex; justify-content: center; gap: 6px; padding: 2px; }
     .sort-tab { white-space: nowrap; border-radius: 999px; padding: 6px 12px; }
     .sort-tab[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
     .header-actions { grid-column: 3; justify-self: end; display: flex; align-items: center; gap: 10px; }
     .header-actions .save-location { margin-left: 0; }
-    .library-tools { position: sticky; top: 65px; z-index: 15; margin: -1px 0 14px; padding: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+    .library-tools { margin: -1px 0 14px; padding: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
     .library-tool-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
     .library-filters { display: flex; flex: 1; flex-wrap: wrap; gap: 8px; align-items: center; }
     .library-filters .input { min-width: 130px; max-width: 220px; padding: 7px 9px; }
@@ -31,6 +31,7 @@
   </style>
 </head>
 <body>
+  <div class="background-stage" aria-hidden="true">
   <svg class="background-lines" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
     <path class="line line-a" d="M-120 200 C220 60 430 340 720 210 S1180 70 1720 240" style="--ls:26s;--lc:14s;--op:0.65;--sw:1.0" />
     <path class="line line-b" d="M-140 320 C260 140 470 490 790 310 S1260 130 1780 350" style="--ls:34s;--lc:16s;--op:0.5;--sw:1.2;animation-direction:reverse" />
@@ -42,6 +43,7 @@
     <path class="line line-h" d="M-110 500 C280 300 500 660 820 480 S1300 280 1780 540" style="--ls:42s;--lc:20s;--op:0.48;--sw:1.0;animation-direction:reverse;animation-delay:18s" />
   </svg>
   <div class="background-scrim" aria-hidden="true"></div>
+  </div>
   <header class="top">
     <div class="brand"><img src="/static/fab.jpeg" class="brand-img" alt="">Fab<em>GUI</em></div>
     <nav class="header-sort-tabs" role="group" aria-label="Sort owned library">
@@ -54,15 +56,12 @@
         <summary class="btn ghost" aria-label="Appearance settings">Appearance</summary>
         <section class="appearance-popover" aria-label="Appearance settings">
           <h2>Liquid glass</h2>
-          <p class="appearance-description">Tune the animated lines and neutral grey glass. Your choices stay in this browser.</p>
-          <label class="appearance-check"><input id="wallpaperEnabled" type="checkbox" checked> Use animated line background</label>
+          <p class="appearance-description">One frost setting controls every glass surface: header, cards, panels, menus and dialogs. Your choices stay in this browser.</p>
+
+          <label class="appearance-check"><input id="wallpaperEnabled" type="checkbox" checked> Animate the line background</label>
           <div class="appearance-status" id="wallpaperStatus" role="status">Slow flowing glass lines</div>
-          <label class="appearance-range-label" for="glassTint"><span>Glass tint</span><output id="glassTintValue">24%</output></label>
-          <input id="glassTint" class="appearance-range" type="range" min="0" max="75" step="1" value="24">
-          <p class="appearance-hint">Higher tint strength means less transparent glass. The tint stays neutral grey.</p>
-          <label class="appearance-range-label" for="glassFrost"><span>Glass frost</span><output id="glassFrostValue">0</output></label>
-          <input id="glassFrost" class="appearance-range" type="range" min="0" max="4" step="0.1" value="0.5">
-          <div class="appearance-kind">
+
+          <div class="appearance-kind" role="radiogroup" aria-label="Background">
             <label><input type="radio" name="wallpaperKind" value="lines" checked> Lines</label>
             <label><input type="radio" name="wallpaperKind" value="video"> Video</label>
             <label><input type="radio" name="wallpaperKind" value="dark-bg"> Dark wallpaper</label>
@@ -70,12 +69,26 @@
           </div>
           <div class="appearance-video">
             <input id="videoFile" type="file" accept="video/*"> Use your own video as background
+            <button id="removeVideo" class="btn small" type="button">Remove video</button>
           </div>
-          <label class="appearance-range-label" for="glassIndex"><span>Refraction index</span><output id="glassIndexValue">1.00</output></label>
-          <input id="glassIndex" class="appearance-range" type="range" min="1.0" max="2.5" step="0.01" value="1.00">
+          <p class="appearance-hint">Videos are converted to silent MP4 with ffmpeg and saved on the server, so the choice survives a reload.</p>
+
+          <label class="appearance-range-label" for="glassFrost"><span>Glass frost (all glass)</span><output id="glassFrostValue">0.0</output></label>
+          <input id="glassFrost" class="appearance-range" type="range" min="0" max="8" step="0.1" value="0">
+          <p class="appearance-hint">0 = crystal clear. This single value drives the frost on every glass surface.</p>
+
+          <label class="appearance-range-label" for="glassTint"><span>Glass tint</span><output id="glassTintValue">24%</output></label>
+          <input id="glassTint" class="appearance-range" type="range" min="0" max="75" step="1" value="24">
+          <p class="appearance-hint">Higher tint strength means less transparent glass. The tint stays neutral grey.</p>
+
+          <label class="appearance-range-label" for="glassIndex"><span>Refraction index</span><output id="glassIndexValue">1.35</output></label>
+          <input id="glassIndex" class="appearance-range" type="range" min="1.0" max="2.5" step="0.01" value="1.35">
           <label class="appearance-range-label" for="glassStrength"><span>Refraction strength</span><output id="glassStrengthValue">30%</output></label>
           <input id="glassStrength" class="appearance-range" type="range" min="0" max="1" step="0.01" value="0.30">
-          <p class="appearance-hint">Index bends light at the glass edge; strength controls how much refraction is applied. Index 1.00 = no bending; strength 0 = flat glass. Refraction applies to cards and header.</p>
+          <label class="appearance-range-label" for="glassBevel"><span>Edge bevel width</span><output id="glassBevelValue">18%</output></label>
+          <input id="glassBevel" class="appearance-range" type="range" min="0.05" max="0.4" step="0.01" value="0.18">
+          <p class="appearance-hint">Index bends light at the glass edge; strength controls the overall lens offset; bevel width sets how wide the bright edge is.</p>
+
           <label class="appearance-range-label" for="wallpaperDim"><span>Background dimming</span><output id="wallpaperDimValue">24%</output></label>
           <input id="wallpaperDim" class="appearance-range" type="range" min="0" max="70" step="1" value="24">
           <button id="resetAppearance" class="btn small" type="button">Reset appearance</button>
@@ -177,9 +190,9 @@
     </div>
   </div>
   <div id="toast" class="toast"></div>
-  <script src="/static/app.js?v=glass-2"></script>
-  <script src="/static/engine-sort.js?v=glass-2"></script>
-  <script type="module" src="/static/appearance.js?v=glass-2"></script>
-  <script src="/static/interaction-fix.js?v=glass-2"></script>
+  <script src="/static/app.js?v=glass-5"></script>
+  <script src="/static/engine-sort.js?v=glass-5"></script>
+  <script src="/static/liquidGL/liquidGL.js?v=glass-5"></script>
+  <script type="module" src="/static/appearance.js?v=glass-5"></script>
 </body>
 </html>

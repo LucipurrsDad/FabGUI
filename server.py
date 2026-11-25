@@ -3,6 +3,7 @@
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -10,11 +11,14 @@ import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 APP_DIR = Path(__file__).resolve().parent
 SETTINGS_PATH = APP_DIR / "settings.json"
 STATIC_DIR = APP_DIR / "static"
+BACKGROUNDS_DIR = STATIC_DIR / "backgrounds"
+USER_VIDEO_PATH = BACKGROUNDS_DIR / "user-video.mp4"
+MAX_VIDEO_UPLOAD = 512 * 1024 * 1024
 DEFAULT_DOWNLOAD_DIR = str(Path.home() / "Downloads")
 DEFAULT_FABCLI = os.environ.get("FABGUI_FABCLI", "fabcli")
 DEFAULTS = {"fabcli_path": DEFAULT_FABCLI, "download_dir": DEFAULT_DOWNLOAD_DIR}
@@ -269,8 +273,12 @@ def cmd_download(body):
 MIME = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
         ".css": "text/css; charset=utf-8", ".json": "application/json; charset=utf-8",
         ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+        ".webp": "image/webp", ".gif": "image/gif", ".avif": "image/avif",
         ".svg": "image/svg+xml", ".ico": "image/x-icon", ".woff": "font/woff",
-        ".woff2": "font/woff2", ".ttf": "font/ttf", ".txt": "text/plain; charset=utf-8",
+        ".woff2": "font/woff2", ".ttf": "font/ttf", ".otf": "font/otf",
+        ".txt": "text/plain; charset=utf-8", ".mp4": "video/mp4",
+        ".m4v": "video/mp4", ".webm": "video/webm", ".ogv": "video/ogg",
+        ".mov": "video/quicktime", ".mkv": "video/x-matroska",
         ".map": "application/json"}
 
 
@@ -288,14 +296,115 @@ class FabGuiHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _send_bytes(self, code, path):
-        data = path.read_bytes()
-        ct = MIME.get(path.suffix.lower(), "application/octet-stream")
-        self.send_response(code)
-        self.send_header("Content-Type", ct)
-        self.send_header("Content-Length", str(len(data)))
+    def _send_file(self, code, path):
+        try:
+            size = path.stat().st_size
+        except OSError:
+            return self._send_json(404, {"ok": False, "message": "not found"})
+        content_type = MIME.get(path.suffix.lower(), "application/octet-stream")
+        start, end = 0, max(0, size - 1)
+        partial = False
+        range_header = (self.headers.get("Range") or "").strip()
+        if range_header:
+            match = re.fullmatch(r"bytes=(\d*)-(\d*)", range_header)
+            if match:
+                first, last = match.group(1), match.group(2)
+                if first:
+                    start = int(first)
+                    end = int(last) if last else size - 1
+                elif last:
+                    start = max(0, size - int(last))
+                    end = size - 1
+                if start >= size or start > end:
+                    self.send_response(416)
+                    self.send_header("Content-Range", f"bytes */{size}")
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
+                end = min(end, size - 1)
+                partial = True
+        length = end - start + 1
+        self.send_response(206 if partial else code)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(length))
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Cache-Control", "no-cache")
+        if partial:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
         self.end_headers()
-        self.wfile.write(data)
+        with path.open("rb") as handle:
+            handle.seek(start)
+            remaining = length
+            while remaining > 0:
+                chunk = handle.read(min(1024 * 1024, remaining))
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                remaining -= len(chunk)
+
+    def _handle_video_upload(self):
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except Exception:
+            length = 0
+        if length <= 0:
+            return self._send_json(400, {"ok": False, "message": "empty upload"})
+        if length > MAX_VIDEO_UPLOAD:
+            return self._send_json(413, {"ok": False, "message": "video is larger than 512 MB"})
+        ffmpeg = shutil.which("ffmpeg")
+        if not ffmpeg:
+            return self._send_json(500, {"ok": False, "message": "ffmpeg is not installed; install it with pacman -S ffmpeg"})
+
+        BACKGROUNDS_DIR.mkdir(parents=True, exist_ok=True)
+        raw_name = unquote(self.headers.get("X-Filename") or "background-video")
+        suffix = Path(raw_name).suffix.lower()
+        if suffix not in (".mp4", ".m4v", ".webm", ".ogv", ".mov", ".mkv", ".avi"):
+            suffix = ".bin"
+        temp_path = BACKGROUNDS_DIR / f".upload-{uuid.uuid4().hex}{suffix}"
+        temp_output = None
+        try:
+            remaining = length
+            with temp_path.open("wb") as handle:
+                while remaining > 0:
+                    chunk = self.rfile.read(min(1024 * 1024, remaining))
+                    if not chunk:
+                        break
+                    handle.write(chunk)
+                    remaining -= len(chunk)
+            if remaining > 0:
+                return self._send_json(400, {"ok": False, "message": "upload ended early"})
+
+            temp_output = BACKGROUNDS_DIR / f".user-video-{uuid.uuid4().hex}.mp4"
+            command = [
+                ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+                "-i", str(temp_path),
+                "-an",
+                "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease",
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+                "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                str(temp_output),
+            ]
+            result = subprocess.run(command, capture_output=True, text=True, timeout=600)
+            if result.returncode != 0:
+                detail = (result.stderr or "ffmpeg failed").strip()[-800:]
+                return self._send_json(500, {"ok": False, "message": f"ffmpeg could not convert this video: {detail}"})
+            temp_output.replace(USER_VIDEO_PATH)
+            url = f"/static/backgrounds/user-video.mp4?v={int(time.time())}"
+            return self._send_json(200, {"ok": True, "url": url})
+        except subprocess.TimeoutExpired:
+            return self._send_json(500, {"ok": False, "message": "ffmpeg timed out while converting the video"})
+        except Exception as exc:
+            return self._send_json(500, {"ok": False, "message": str(exc)})
+        finally:
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
+            if temp_output is not None:
+                try:
+                    temp_output.unlink()
+                except OSError:
+                    pass
 
     def _read_body(self):
         try:
@@ -378,7 +487,9 @@ class FabGuiHandler(BaseHTTPRequestHandler):
 
         if path == "/api/health":
             return self._send_json(200, {"ok": True, "fabcli": SETTINGS["fabcli_path"],
-                                        "download_dir": resolve_download_dir(), "time": time.time()})
+                                        "download_dir": resolve_download_dir(),
+                                        "ffmpeg": bool(shutil.which("ffmpeg")),
+                                        "time": time.time()})
         if path == "/api/settings":
             return self._send_json(200, dict(SETTINGS))
         if path == "/api/auth/status":
@@ -416,7 +527,7 @@ class FabGuiHandler(BaseHTTPRequestHandler):
                 history = list(DOWNLOAD_HISTORY)
             return self._send_json(200, {"history": history})
         if path in ("/", "/index.html"):
-            return self._send_bytes(200, STATIC_DIR / "index.html")
+            return self._send_file(200, STATIC_DIR / "index.html")
         if path.startswith("/static/"):
             rel = path[len("/static/"):]
             file_path = (STATIC_DIR / rel).resolve()
@@ -426,12 +537,23 @@ class FabGuiHandler(BaseHTTPRequestHandler):
                 return self._send_json(404, {"ok": False, "message": "not found"})
             if not file_path.is_file():
                 return self._send_json(404, {"ok": False, "message": "not found"})
-            return self._send_bytes(200, file_path)
+            return self._send_file(200, file_path)
         return self._send_json(404, {"ok": False, "message": "not found"})
 
     def do_POST(self):
         parsed = urlparse(self.path)
         path = parsed.path or "/"
+        if path == "/api/backgrounds/video":
+            return self._handle_video_upload()
+        if path == "/api/backgrounds/video/delete":
+            removed = 0
+            for candidate in BACKGROUNDS_DIR.glob("user-video*.mp4"):
+                try:
+                    candidate.unlink()
+                    removed += 1
+                except OSError:
+                    pass
+            return self._send_json(200, {"ok": True, "removed": removed})
         body = self._read_body()
         if path == "/api/auth/login":
             manual = bool(body.get("manual"))

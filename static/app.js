@@ -172,9 +172,11 @@ function openEventSource(jobId, onProgress) {
   closeEventSource(jobId);
   const eventSource = new EventSource(`/api/jobs/${jobId}/progress`);
   if (jobWatchers[jobId]) jobWatchers[jobId].eventSource = eventSource;
-  eventSource.onmessage = (event) => {
+  const handler = (event) => {
     try { if (onProgress) onProgress(JSON.parse(event.data)); } catch (error) {}
   };
+  eventSource.onmessage = handler;
+  eventSource.addEventListener("progress", handler);
 }
 
 function setupFilters() {
@@ -252,13 +254,16 @@ function renderResults() {
   $("#resultCount").textContent = `${rows.length} of ${state.results.length} item(s)`;
   if (!rows.length) {
     grid.classList.add("hidden");
+    grid.innerHTML = "";
     empty.textContent = state.results.length ? "No items match these filters. Try clearing one or more filters." : "Your owned library is empty.";
     empty.classList.remove("hidden");
+    window.dispatchEvent(new CustomEvent("fabgui:results-rendered", { detail: { count: 0 } }));
     return;
   }
   empty.classList.add("hidden");
   grid.classList.remove("hidden");
   grid.innerHTML = rows.map(rowHtml).join("");
+  window.dispatchEvent(new CustomEvent("fabgui:results-rendered", { detail: { count: rows.length } }));
 }
 
 function assetImage(asset) {
@@ -289,7 +294,7 @@ function rowHtml(asset) {
     ...categories.map((category) => `<span class="asset-meta-chip category">${esc(category)}</span>`),
     method ? `<span class="asset-meta-chip">${esc(formatLabel(method))}</span>` : "",
   ].filter(Boolean).join("");
-  return `<div class="asset-card" data-uid="${esc(uid)}" data-title="${esc(title)}">
+  return `<div class="asset-card" data-uid="${esc(uid)}" data-title="${esc(title)}" role="button" tabindex="0" aria-label="Download ${esc(title)}">
     ${imageCell}<div class="asset-card-body"><div class="asset-card-title">${esc(title)}</div>${chips ? `<div class="asset-card-meta">${chips}</div>` : ""}</div>
   </div>`;
 }
@@ -328,16 +333,23 @@ async function openDownloadModal(uid, title) {
 async function confirmDownload() {
   const pending = state.pending;
   if (!pending) return;
-  const health = await api("/api/health").catch(() => ({ download_dir: "" }));
-  const body = {
-    uid: pending.uid,
-    output_dir: health.download_dir || "",
-    engine: $("#engineSelect").value,
-    platform: $("#downloadPlatformSelect").value,
-    jobs: 8,
-  };
+  const button = $("#engineModalConfirm");
+  const engine = $("#engineSelect").value;
+  const platform = $("#downloadPlatformSelect").value;
+  if (button) button.disabled = true;
 
   try {
+    const health = await api("/api/health");
+    const base = String(health.download_dir || "").replace(/\/+$/, "");
+    const outputDir = base ? `${base}/${slugify(pending.title || pending.uid)}` : "";
+    const body = {
+      uid: pending.uid,
+      output_dir: outputDir,
+      engine,
+      platform,
+      jobs: 8,
+    };
+
     const response = await api("/api/download", { method: "POST", body });
     $("#engineModal").classList.add("hidden");
     state.pending = null;
@@ -348,7 +360,7 @@ async function confirmDownload() {
     toast("Download started…", "loading");
     const jobId = response.job_id;
     if (!jobId) return;
-    addJobRow(jobId, $("#engineModalTitle").textContent || pending.uid, $("#engineSelect").value, $("#downloadPlatformSelect").value);
+    addJobRow(jobId, pending.title || pending.uid, engine, platform);
     openEventSource(jobId, (progress) => updateJobProgress(jobId, progress));
     watchJob(jobId, (result) => {
       const row = document.getElementById("job-" + jobId);
@@ -373,6 +385,8 @@ async function confirmDownload() {
     });
   } catch (error) {
     toast("Download failed: " + error.message, "error");
+  } finally {
+    if (button) button.disabled = false;
   }
 }
 
@@ -381,35 +395,35 @@ const jobProgress = {};
 function addJobRow(jobId, title, engine, platform) {
   const body = $("#jobsBody");
   if (!body) return;
+  const engineLabel = String(engine || "").replace("UE_", "UE ");
+  const platformLabel = String(platform || "");
   const row = document.createElement("tr");
   row.id = "job-" + jobId;
   row.innerHTML = `
     <td class="w-check"><span class="spinner" style="width:14px;height:14px;border-width:2px;margin-right:6px;"></span></td>
     <td class="cell-title" title="${esc(title)}">${esc(title)}</td>
-    <td class="job-status running">Starting · ${esc(engine.replace("UE_", "UE "))} / ${esc(platform)}</td>
+    <td class="job-status running">Starting${engineLabel ? " · " + esc(engineLabel) : ""}${platformLabel ? " / " + esc(platformLabel) : ""}</td>
     <td class="job-progress"><div class="progress-bar"><div></div></div><span style="font-size:0.8em;color:#aaa">0%</span></td>
   `;
   body.appendChild(row);
 }
 
 function updateJobProgress(jobId, progress) {
-  const body = $("#jobsBody");
-  if (!body) return;
-  let row = document.getElementById("job-" + jobId);
+  const row = document.getElementById("job-" + jobId);
   if (!row) return;
   const cells = row.querySelectorAll("td");
   if (cells.length < 4) return;
-  const percent = progress.percent != null ? Math.round(progress.percent) : null;
+  const rawPercent = progress.percent != null ? progress.percent : progress.progress;
+  const percent = rawPercent != null ? Math.round(rawPercent) : null;
   const statusCell = cells[2];
   const progressCell = cells[3];
   const bar = progressCell.querySelector(".progress-bar > div");
   const pctText = progressCell.querySelector("span");
+
   let pct = percent;
   if (pct == null) {
     jobProgress[jobId] = Math.min(90, (jobProgress[jobId] || 0) + 2);
     pct = jobProgress[jobId];
-    statusCell.textContent = "Downloading · " + pct + "%";
-    statusCell.className = "job-status running";
   }
   if (pct != null) {
     if (bar) bar.style.width = pct + "%";
@@ -417,14 +431,18 @@ function updateJobProgress(jobId, progress) {
     if (pct >= 100) {
       statusCell.textContent = "Processing…";
       statusCell.className = "job-status running";
+    } else {
+      statusCell.textContent = "Downloading · " + pct + "%";
+      statusCell.className = "job-status running";
     }
   }
+
   const downloaded = progress.downloaded_bytes != null ? fmtBytes(progress.downloaded_bytes) : "";
   const total = progress.total_bytes != null ? fmtBytes(progress.total_bytes) : "";
   const dlRate = progress.download_speed ? fmtBytes(progress.download_speed) + "/s" : "";
   const detail = [downloaded, total ? "/" + total : "", dlRate].filter(Boolean).join(" ");
-  if (detail) statusCell.textContent = (statusCell.textContent.split(" · ")[0] || "Downloading") + " · " + detail;
-  // clear the spinner once we have progress
+  if (detail && pct < 100) statusCell.textContent = (statusCell.textContent.split(" · ")[0] || "Downloading") + " · " + detail;
+
   const spin = row.querySelector(".spinner");
   if (spin) spin.style.display = "none";
 }
@@ -518,7 +536,7 @@ function toast(msg, kind, anchorEl) {
     t.prepend(icon);
     t.className = "toast success show";
   } else if (kind === "error") {
-    icon.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" style="display:inline-block"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    icon.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" style="display:inline-block"><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>';
     t.textContent = msg;
     t.prepend(icon);
     t.className = "toast error show";
@@ -575,6 +593,13 @@ async function init() {
     const card = event.target.closest(".asset-card");
     if (card && card.dataset.uid) openDownloadModal(card.dataset.uid, card.dataset.title);
   });
+  $("#resultsGrid").addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const card = event.target.closest(".asset-card");
+    if (!card || !card.dataset.uid) return;
+    event.preventDefault();
+    openDownloadModal(card.dataset.uid, card.dataset.title);
+  });
   $("#resultsGrid").addEventListener("contextmenu", (event) => {
     const card = event.target.closest(".asset-card");
     if (!card) return;
@@ -587,18 +612,32 @@ async function init() {
   });
   $("#engineModalCancel").addEventListener("click", () => { $("#engineModal").classList.add("hidden"); state.pending = null; });
   $("#engineModalConfirm").addEventListener("click", confirmDownload);
+  [$("#engineModal"), $("#helpModal")].forEach((modal) => {
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) {
+        modal.classList.add("hidden");
+        if (modal === $("#engineModal")) state.pending = null;
+      }
+    });
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    $("#engineModal").classList.add("hidden");
+    $("#helpModal").classList.add("hidden");
+    state.pending = null;
+  });
   await loadLibrary();
   await refreshAuthTab();
 }
 
-/* Expose the helpers the interaction-fix module (and DevTools console) needs.
-   interaction-fix captures card clicks in the capture phase and calls these
-   directly, so they must be reachable on window, otherwise clicking Download
-   silently does nothing. */
+/* Expose the helpers used by the download flow and the DevTools console.
+   Keeping them on window also makes progress updates work from delegated
+   handlers after the card grid is re-rendered. */
 window.api = api;
 window.state = state;
 window.openDownloadModal = openDownloadModal;
 window.addJobRow = addJobRow;
+window.updateJobProgress = updateJobProgress;
 window.watchJob = watchJob;
 window.openEventSource = openEventSource;
 window.fmtBytes = fmtBytes;

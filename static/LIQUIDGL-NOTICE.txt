@@ -1,5 +1,9 @@
 # liquidGL integration notice
 
-FabGUI loads the `liquid-gl` JavaScript module (version 3.0.0) from jsDelivr at runtime. The liquidGL source code is not vendored in this repository. liquidGL is © NaughtyDuk and is licensed under the MIT License; see <https://github.com/naughtyduk/liquidGL/blob/main/package/LICENSE> for the license terms.
+FabGUI vendors the `liquidGL` v3.0.0 browser script in `static/liquidGL/`.
+liquidGL is © NaughtyDuk and is licensed under the MIT License; see
+`static/liquidGL/LICENSE` for the license terms.
 
-FabGUI does not copy or redistribute liquidGL's demo media. The wallpaper is selected by the user from their own device and stored locally in the browser's IndexedDB when browser storage permits.
+FabGUI uses liquidGL to render the header and asset cards as refracting glass
+panes. The remaining glass surfaces use the same tint and frost variables as a
+CSS fallback. FabGUI does not copy or redistribute liquidGL's demo media.
