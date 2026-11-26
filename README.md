@@ -21,6 +21,7 @@ Fab's categories and distribution metadata can be broad and change upstream. The
 ## Platform support
 
 The included installer targets **Arch Linux, CachyOS, and other Arch-based distributions** using `pacman`. The installer does not install dependencies on Debian, Ubuntu, Fedora, or other package families; on those systems, install compatible FabCLI WebKitGTK 4.1 runtime packages manually.
+*Install webkit2gtk-4.1, harfbuzz, libmanette, hyphen, and ffmpeg via your distro's package manager for compatability."
 
 FabGUI requires Python 3.8+ (standard library only) and FabCLI. FabCLI's Linux WebView needs the following Arch packages:
 
