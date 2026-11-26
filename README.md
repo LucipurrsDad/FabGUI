@@ -1,10 +1,13 @@
 # FabGUI
+<img width="3840" height="2160" alt="Screenshot_20261126_030158" src="https://github.com/user-attachments/assets/f52e16d5-d8d3-4936-bfd2-1851ffdeb57a" />
+<img width="3840" height="2160" alt="Screenshot_20261126_030433" src="https://github.com/user-attachments/assets/ff2c2258-0f5c-400e-b221-59b829dc13d7" />
 
-A self-hosted web app for [FabCLI](https://github.com/zirklerite/FabCLI), the Epic Games / Fab asset downloader for Linux. FabGUI turns your owned Fab library into a searchable, sortable visual catalog, with direct download and authentication controls.
+A self-hosted web app for [FabCLI](https://github.com/zirklerite/FabCLI), the Epic Games / Fab asset download tool for Linux. FabGUI turns your owned Fab library into a searchable, sortable visual catalog wuth apple refinement. Includes direct download and authentication controls.
 
 ## Features
 
 - **Visual owned library** — browse owned Fab items in a responsive card grid with thumbnails and metadata.
+- **As far as I know this tool is the only way to sort your owned assets by entire projects and is the entire point of this tool. Even epic launcher for linux will not work, this tool does, just pick windows and your engine version.
 - **Header sort tabs** — switch between **Latest engine** (highest Unreal Engine version listed first) and **A–Z**. The tabs are centered in the page header and the selected sort is remembered.
 - **Search and filters** — search titles, categories, IDs, and descriptions; filter by engine version, Fab category, distribution format, and target platform. Filter options and counts are built from the current `fabcli library` response.
 - **At-a-glance metadata** — cards show the latest listed engine version, category, and distribution format.
@@ -67,13 +70,13 @@ No Git checkout is needed to update an existing installation. Run this as the ac
 curl -fsSL https://raw.githubusercontent.com/LucipurrsDad/FabGUI/main/update.sh | bash
 ```
 
-The updater downloads the latest public `main` archive, replaces the installed `server.py`, `static/`, and `backgrounds/` files in `~/.local/share/fabgui`, leaves settings intact, and restarts the `fabgui.service` user unit if present. To use a non-default install directory, set `FABGUI_DIR` before running the updater. Hard-refresh the browser (Ctrl+F5) if it still displays cached files.
+The updater downloads the latest public `main` archive, replaces the installed `server.py`, `static/`, and `backgrounds/` files in `~/.local/share/fabgui`, leaves settings intact, and restarts the `fabgui.service` user unit if present. To use a non-default install directory, set `FABGUI_DIR` before running the updater. Hard-refresh the browser (Ctrl+Shift+r or F5) if it still displays cached files.
 
 ## Run and troubleshoot
 
-Manage the service from your regular desktop-user terminal. **Do not prefix `systemctl --user` with `sudo`**; `sudo` changes users and loses the desktop user's D-Bus session connection.
+Manage the service from your regular desktop-user terminal. **Do not prefix `systemctl --user` with `sudo`**; `sudo` changes users and loses the desktop user's D-Bus session connection. If you have some interesting errors or warnings pertaining to the fabgui.service or the FabGUI web app please open an issue ticket.
 
-```bash
+```bash 
 systemctl --user status fabgui.service
 systemctl --user restart fabgui.service
 journalctl --user -u fabgui.service -n 100 --no-pager
@@ -86,11 +89,16 @@ sudo ss -ltnp 'sport = :8000'
 systemctl --user status fabgui.service
 ```
 
+-The reset fises most issues with no manual intervention.
 If the listener is a manually started FabGUI process, stop that specific process (for example, press Ctrl+C in the terminal where it was launched, or terminate its confirmed PID), then start the managed unit:
 
 ```bash
 systemctl --user reset-failed fabgui.service
 systemctl --user start fabgui.service
+```
+or
+```
+systemctl --user restart fabgui
 ```
 
 Confirm the service is running and that it serves the updated header markup:
@@ -106,7 +114,8 @@ To run without systemd, use `python3 ~/.local/share/fabgui/server.py` and make s
 
 Click **Appearance** in the header to open the liquid-glass panel. Choices are saved in browser localStorage.
 
-- **Use animated line background** — toggle the flowing procedural glass lines behind the page.
+- **Use animated line background** - deepseek went wild on this one. Make sure to check it out.
+- **Lines** — toggle the flowing procedural glass lines behind the page.
 - **Glass tint** — neutral grey tint strength (0–75%). Higher means less transparent glass.
 - **Glass frost** — global frosted glass blur applied to every glass element (header, panels, cards, modal, toast, popover). 0 = crystal clear; higher = more blur.
 - **Refraction index** — IOR (index of refraction) at the glass edge. `1.00` = no bending; higher values bend light more.
