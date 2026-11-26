@@ -9,7 +9,7 @@ FabGUI/
 ├── SESSION.md                         Local release progress and verification
 ├── Screenshot_20261126_030158.png      Existing UI screenshot
 ├── Screenshot_20261126_030433.png      Existing UI screenshot
-├── install.sh                         Userspace installer for pacman and apt distributions
+├── install.sh                         Userspace installer for pacman, apt, and DNF distributions
 ├── server.py                          Loopback HTTP service, FabCLI jobs and background videos
 ├── settings.json                      Default local FabCLI and download directory settings
 ├── update.sh                          Updater for the latest public main archive

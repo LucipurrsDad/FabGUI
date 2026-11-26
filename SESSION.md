@@ -2,8 +2,8 @@
 
 ## Current build stage
 
-Release candidate installed locally at <http://127.0.0.1:8000> as the
-`fabgui.service` user service. Source remains local, awaiting approval to push.
+The polish release is installed locally at <http://127.0.0.1:8000> and is
+on `origin/main`. Fedora/DNF support is a local follow-up.
 
 ## What was done
 
@@ -23,6 +23,9 @@ Release candidate installed locally at <http://127.0.0.1:8000> as the
   toasts use the shared optics and dismiss automatically after eight seconds.
 - Expanded the installer to pacman and apt, and kept the public-main update
   flow while preserving installed settings and video.
+- Added Fedora/DNF package detection and installation with `webkit2gtk4.1`
+  and an RPM provider of `/usr/bin/ffmpeg`. Video wallpaper conversion uses
+  Fedora's OpenH264 when x264 is unavailable and keeps the same H.264 MP4 path.
 - Added a four-second README loop rendered by the production WebGL shader
   with 2 px frost and 15% edge curvature. The shareable 720p H.264 export is
   `~/Videos/FabGUI-glass-demo-720p.mp4`.
@@ -57,6 +60,10 @@ Release candidate installed locally at <http://127.0.0.1:8000> as the
   package dependencies and skip-on-reinstall; systemd was stubbed in the container.
   A local archive fixture verified the updater's asset replacement, preservation,
   and service restart request.
+- Fedora 44 container: DNF resolved and installed Python, WebKitGTK 4.1, and
+  stock `ffmpeg-free`; a second install skipped packages. An H.264 upload
+  converted, streamed, and deleted as muted MP4 via OpenH264. The same test on
+  CachyOS used x264. Ubuntu 24.04's apt install and reinstall passed again.
 - Demo media: decoded all 56 distinct GIF frames and verified the 1280×720,
   30 fps MP4. Both exports use the same four-second sequence.
 - The live service serves the new SVG and all three manifest icons. The
@@ -73,5 +80,5 @@ Release candidate installed locally at <http://127.0.0.1:8000> as the
 
 ## Next steps
 
-- Review the local release before publishing. Fresh interactive Epic sign-in
-  and other distribution versions were not exercised.
+- Review the Fedora follow-up before publishing. Fedora desktop service
+  activation and interactive Epic sign-in were not exercised in the container.

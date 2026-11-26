@@ -354,7 +354,7 @@ class FabGuiHandler(BaseHTTPRequestHandler):
             return self._send_json(413, {"ok": False, "message": "video is larger than 512 MB"})
         ffmpeg = shutil.which("ffmpeg")
         if not ffmpeg:
-            return self._send_json(500, {"ok": False, "message": "ffmpeg is not installed. Install the ffmpeg package using your package manager."})
+            return self._send_json(500, {"ok": False, "message": "FFmpeg is not installed. Install ffmpeg (ffmpeg-free on Fedora)."})
 
         raw_name = unquote(self.headers.get("X-Filename") or "background-video")
         suffix = Path(raw_name).suffix.lower()
@@ -374,13 +374,26 @@ class FabGuiHandler(BaseHTTPRequestHandler):
             if remaining > 0:
                 return self._send_json(400, {"ok": False, "message": "upload ended early"})
 
+            encoder_list = subprocess.run(
+                [ffmpeg, "-hide_banner", "-encoders"],
+                capture_output=True, text=True, check=True, timeout=10,
+            ).stdout
+            encoders = set(re.findall(r"^\s*V\S{5}\s+(\S+)", encoder_list, re.MULTILINE))
+            if "libx264" in encoders:
+                video_options = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23"]
+            elif "libopenh264" in encoders:
+                # Fedora's ffmpeg-free provides OpenH264 in place of x264.
+                video_options = ["-c:v", "libopenh264", "-b:v", "5M"]
+            else:
+                return self._send_json(500, {"ok": False, "message": "FFmpeg needs libx264 or libopenh264 to save a video wallpaper."})
+
             temp_output = APP_DIR / f".user-video-{uuid.uuid4().hex}.mp4"
             command = [
                 ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
                 "-i", str(temp_path),
                 "-an",
-                "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease",
-                "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+                "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease:force_divisible_by=2",
+                *video_options,
                 "-pix_fmt", "yuv420p", "-movflags", "+faststart",
                 str(temp_output),
             ]

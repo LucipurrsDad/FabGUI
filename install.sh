@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# FabGUI userspace installer for pacman and apt based Linux desktops.
+# FabGUI userspace installer for pacman, apt, and DNF based Linux desktops.
 set -euo pipefail
 
 FABGUI_DIR="$HOME/.local/share/fabgui"
@@ -26,14 +26,25 @@ case " ${ID-} ${ID_LIKE-} " in
     manager=apt-get
     packages=(python3 libwebkit2gtk-4.1-0 ffmpeg)
     ;;
+  *" fedora "*)
+    manager=dnf
+    if ! command -v dnf >/dev/null 2>&1 && command -v dnf5 >/dev/null 2>&1; then
+      manager=dnf5
+    fi
+    # This file capability accepts Fedora's ffmpeg-free or an existing full build.
+    packages=(python3 webkit2gtk4.1 /usr/bin/ffmpeg)
+    ;;
   *)
-    echo "Error: unsupported distribution (${PRETTY_NAME:-unknown}). FabGUI supports Arch/pacman and Debian or Ubuntu/apt systems." >&2
+    echo "Error: unsupported distribution (${PRETTY_NAME:-unknown}). FabGUI supports Arch/pacman, Debian or Ubuntu/apt, and Fedora/DNF systems." >&2
     exit 1
     ;;
 esac
 
 tools=("$manager" systemctl)
-if [[ $manager == apt-get ]]; then tools+=(dpkg-query); fi
+case "$manager" in
+  apt-get) tools+=(dpkg-query) ;;
+  dnf|dnf5) tools+=(rpm) ;;
+esac
 for tool in "${tools[@]}"; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "Error: '$tool' is required on ${PRETTY_NAME:-this distribution}." >&2
@@ -47,11 +58,13 @@ fi
 
 missing=()
 for package in "${packages[@]}"; do
-  if [[ $manager == pacman ]]; then
-    pacman -Q "$package" >/dev/null 2>&1 || missing+=("$package")
-  elif [[ $(dpkg-query -W -f='${Status}' "$package" 2>/dev/null) != "install ok installed" ]]; then
-    missing+=("$package")
-  fi
+  case "$manager" in
+    pacman) pacman -Q "$package" >/dev/null 2>&1 || missing+=("$package") ;;
+    apt-get)
+      [[ $(dpkg-query -W -f='${Status}' "$package" 2>/dev/null) == "install ok installed" ]] || missing+=("$package")
+      ;;
+    dnf|dnf5) rpm -q --whatprovides "$package" >/dev/null 2>&1 || missing+=("$package") ;;
+  esac
 done
 
 echo "==> FabGUI installer for ${PRETTY_NAME:-Linux}"
@@ -62,14 +75,23 @@ if ((${#missing[@]})); then
     exit 1
   fi
   echo "==> Installing missing packages: ${missing[*]}"
-  if [[ $manager == pacman ]]; then
-    sudo pacman -S --needed "${missing[@]}" || { echo "Error: pacman could not install the required packages." >&2; exit 1; }
-  else
-    if ! sudo apt-get update || ! sudo apt-get install --no-upgrade "${missing[@]}"; then
-      echo "Error: apt could not install the required packages. Check that your release provides libwebkit2gtk-4.1-0." >&2
-      exit 1
-    fi
-  fi
+  case "$manager" in
+    pacman)
+      sudo pacman -S --needed "${missing[@]}" || { echo "Error: pacman could not install the required packages." >&2; exit 1; }
+      ;;
+    apt-get)
+      if ! sudo apt-get update || ! sudo apt-get install --no-upgrade "${missing[@]}"; then
+        echo "Error: apt could not install the required packages. Check that your release provides libwebkit2gtk-4.1-0." >&2
+        exit 1
+      fi
+      ;;
+    dnf|dnf5)
+      if ! sudo "$manager" install "${missing[@]}"; then
+        echo "Error: $manager could not install the required packages. Check that your enabled repositories provide python3, webkit2gtk4.1, and FFmpeg (ffmpeg-free on Fedora)." >&2
+        exit 1
+      fi
+      ;;
+  esac
 fi
 
 export PATH="$HOME/.local/bin:$PATH"

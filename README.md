@@ -54,8 +54,11 @@ FabGUI requires Python 3.8+ (standard library only), [FabCLI](https://github.com
 | --- | --- | --- |
 | Arch, CachyOS, and compatible derivatives | `pacman` | `python`, `webkit2gtk-4.1`, `ffmpeg` |
 | Debian, Ubuntu, and compatible derivatives | `apt-get` | `python3`, `libwebkit2gtk-4.1-0`, `ffmpeg` |
+| Fedora and compatible DNF-based RPM distributions | `dnf` / `dnf5` | `python3`, `webkit2gtk4.1`, `ffmpeg-free` or an existing FFmpeg package |
 
-WebKitGTK brings in the GTK and WebView libraries FabCLI links against. FFmpeg converts uploaded background videos. Derivatives must provide the listed packages; on Ubuntu, FFmpeg may require the `universe` repository. The desktop install and launcher were tested on CachyOS with KDE Plasma; the apt package installation was tested in an Ubuntu 24.04 container.
+WebKitGTK brings in the GTK and WebView libraries FabCLI links against. FFmpeg converts uploaded background videos to muted H.264 MP4. FabGUI uses x264 when available and OpenH264 with Fedora’s stock `ffmpeg-free`. DNF resolves the package providing `/usr/bin/ffmpeg`; an existing full FFmpeg installation is reused. The installer does not add repositories or swap installed FFmpeg packages. Derivatives must provide the listed packages; on Ubuntu, FFmpeg may require the `universe` repository.
+
+The desktop install and launcher were tested on CachyOS with KDE Plasma. Package installation was tested in Ubuntu 24.04 and Fedora 44 containers.
 
 Verify FabCLI is discoverable and its linked libraries resolve:
 
@@ -155,7 +158,7 @@ The WebGL 2 renderer adapts the optics from [NaughtyDuk's liquidGL](https://gith
 - `static/backgrounds/` — Gold-Gate and 40th Anniversary wallpapers.
 - `backgrounds/` — project source wallpapers (synced to static/backgrounds/).
 - `settings.json` — runtime settings.
-- `install.sh` — userspace installer for Arch/pacman and Debian/Ubuntu/apt systems.
+- `install.sh` — userspace installer for Arch/pacman, Debian/Ubuntu/apt, and Fedora/DNF systems.
 - `update.sh` — updater for the latest public `main` version.
 
 ## License
