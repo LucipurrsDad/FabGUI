@@ -6,8 +6,7 @@ A self-hosted web app for [FabCLI](https://github.com/zirklerite/FabCLI), the Ep
 
 ## Features
 
-- **Visual owned library** — browse owned Fab items in a responsive card grid with thumbnails and metadata.
-- **As far as I know this tool is the only way to sort your owned assets by entire projects and is the entire point of this tool. Even epic launcher for linux will not work, this tool does, just pick windows and your engine version.
+- **Visual owned library** — browse owned Fab items in a responsive card grid with thumbnails and metadata. As far as I know this tool is the only way to sort your owned assets by entire projects and is the entire point of this tool. Even epic launcher for Linux will not work, this tool does, just pick windows and your engine version.
 - **Header sort tabs** — switch between **Latest engine** (highest Unreal Engine version listed first) and **A–Z**. The tabs are centered in the page header and the selected sort is remembered.
 - **Search and filters** — search titles, categories, IDs, and descriptions; filter by engine version, Fab category, distribution format, and target platform. Filter options and counts are built from the current `fabcli library` response.
 - **At-a-glance metadata** — cards show the latest listed engine version, category, and distribution format.
