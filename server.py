@@ -17,7 +17,8 @@ APP_DIR = Path(__file__).resolve().parent
 SETTINGS_PATH = APP_DIR / "settings.json"
 STATIC_DIR = APP_DIR / "static"
 BACKGROUNDS_DIR = STATIC_DIR / "backgrounds"
-USER_VIDEO_PATH = BACKGROUNDS_DIR / "user-video.mp4"
+USER_VIDEO_PATH = APP_DIR / "user-video.mp4"
+LEGACY_VIDEO_PATH = BACKGROUNDS_DIR / USER_VIDEO_PATH.name
 MAX_VIDEO_UPLOAD = 512 * 1024 * 1024
 DEFAULT_DOWNLOAD_DIR = str(Path.home() / "Downloads")
 DEFAULT_FABCLI = os.environ.get("FABGUI_FABCLI", "fabcli")
@@ -181,14 +182,14 @@ def start_job(name, args_fn, meta=None):
     jid = uuid.uuid4().hex[:12]
     job = {"id": jid, "name": name, "state": "running", "created_at": time.time(),
             "updated_at": time.time(), "started_at": time.time(), "result": None,
-            "error": None, "proc": None, "meta": meta or {}}
+            "error": None, "meta": meta or {}}
     with JOBS_LOCK:
         JOBS[jid] = job
 
     def runner():
         output_dir = job["meta"].get("output_dir")
         try:
-            proc = job["proc"] = fabcli_proc(args_fn())
+            proc = fabcli_proc(args_fn())
             res = collect_proc(proc)
         except Exception as exc:
             res = {"ok": False, "code": -1, "timed_out": False, "stdout": "",
@@ -198,7 +199,7 @@ def start_job(name, args_fn, meta=None):
         if not parsed["ok"] and parsed.get("kind") == "output_collision" and job["name"] == "download":
             cleanup_cache(output_dir)
             try:
-                proc = job["proc"] = fabcli_proc(args_fn())
+                proc = fabcli_proc(args_fn())
                 res = collect_proc(proc)
             except Exception as exc:
                 res = {"ok": False, "code": -1, "timed_out": False, "stdout": "",
@@ -210,7 +211,6 @@ def start_job(name, args_fn, meta=None):
             job["result"] = parsed
             job["error"] = parsed if not parsed["ok"] else None
             job["updated_at"] = time.time()
-            job["proc"] = None
             if job["name"] == "download":
                 with HISTORY_LOCK:
                     DOWNLOAD_HISTORY.insert(0, {"id": jid, "uid": job["meta"].get("uid"),
@@ -292,16 +292,17 @@ class FabGuiHandler(BaseHTTPRequestHandler):
         body = json.dumps(obj).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
-    def _send_file(self, code, path):
+    def _send_file(self, code, path, cache_control="no-cache", content_type=None):
         try:
             size = path.stat().st_size
         except OSError:
             return self._send_json(404, {"ok": False, "message": "not found"})
-        content_type = MIME.get(path.suffix.lower(), "application/octet-stream")
+        content_type = content_type or MIME.get(path.suffix.lower(), "application/octet-stream")
         start, end = 0, max(0, size - 1)
         partial = False
         range_header = (self.headers.get("Range") or "").strip()
@@ -328,7 +329,7 @@ class FabGuiHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(length))
         self.send_header("Accept-Ranges", "bytes")
-        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Cache-Control", cache_control)
         if partial:
             self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
         self.end_headers()
@@ -353,14 +354,13 @@ class FabGuiHandler(BaseHTTPRequestHandler):
             return self._send_json(413, {"ok": False, "message": "video is larger than 512 MB"})
         ffmpeg = shutil.which("ffmpeg")
         if not ffmpeg:
-            return self._send_json(500, {"ok": False, "message": "ffmpeg is not installed; install it with pacman -S ffmpeg"})
+            return self._send_json(500, {"ok": False, "message": "ffmpeg is not installed. Install the ffmpeg package using your package manager."})
 
-        BACKGROUNDS_DIR.mkdir(parents=True, exist_ok=True)
         raw_name = unquote(self.headers.get("X-Filename") or "background-video")
         suffix = Path(raw_name).suffix.lower()
         if suffix not in (".mp4", ".m4v", ".webm", ".ogv", ".mov", ".mkv", ".avi"):
             suffix = ".bin"
-        temp_path = BACKGROUNDS_DIR / f".upload-{uuid.uuid4().hex}{suffix}"
+        temp_path = APP_DIR / f".upload-{uuid.uuid4().hex}{suffix}"
         temp_output = None
         try:
             remaining = length
@@ -374,7 +374,7 @@ class FabGuiHandler(BaseHTTPRequestHandler):
             if remaining > 0:
                 return self._send_json(400, {"ok": False, "message": "upload ended early"})
 
-            temp_output = BACKGROUNDS_DIR / f".user-video-{uuid.uuid4().hex}.mp4"
+            temp_output = APP_DIR / f".user-video-{uuid.uuid4().hex}.mp4"
             command = [
                 ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
                 "-i", str(temp_path),
@@ -429,8 +429,9 @@ class FabGuiHandler(BaseHTTPRequestHandler):
 
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
-        self.send_header("Cache-Control", "no-cache")
-        self.send_header("Connection", "keep-alive")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "close")
+        self.close_connection = True
         self.end_headers()
 
         def send(event, data):
@@ -461,7 +462,7 @@ class FabGuiHandler(BaseHTTPRequestHandler):
                 changed = state != last_state or (ticks % 10 == 0)
                 last_state = state
                 if changed:
-                    send("progress", {
+                    sent = send("progress", {
                         "job_id": jid,
                         "state": state,
                         "progress": progress_pct,
@@ -469,6 +470,8 @@ class FabGuiHandler(BaseHTTPRequestHandler):
                         "message": result.get("message") if isinstance(result, dict) else None,
                         "error": error.get("message") if isinstance(error, dict) else None,
                     })
+                    if not sent:
+                        break
                 if state in ("success", "error"):
                     break
                 time.sleep(0.1)
@@ -509,7 +512,7 @@ class FabGuiHandler(BaseHTTPRequestHandler):
                                         "message": res.get("message"), "data": res.get("data")})
         if path == "/api/jobs":
             with JOBS_LOCK:
-                jobs = sorted(JOBS.values(), key=lambda item: item["created_at"], reverse=True)
+                jobs = sorted((job.copy() for job in JOBS.values()), key=lambda item: item["created_at"], reverse=True)
             return self._send_json(200, {"jobs": jobs[:30]})
         if path.startswith("/api/jobs/"):
             rest = path[len("/api/jobs/"):].strip("/")
@@ -518,7 +521,7 @@ class FabGuiHandler(BaseHTTPRequestHandler):
                 return self._job_progress_sse(jid)
             jid = rest
             with JOBS_LOCK:
-                job = JOBS.get(jid)
+                job = JOBS[jid].copy() if jid in JOBS else None
             if job is None:
                 return self._send_json(404, {"ok": False, "message": "job not found"})
             return self._send_json(200, job)
@@ -528,6 +531,13 @@ class FabGuiHandler(BaseHTTPRequestHandler):
             return self._send_json(200, {"history": history})
         if path in ("/", "/index.html"):
             return self._send_file(200, STATIC_DIR / "index.html")
+        if path == "/service-worker.js":
+            return self._send_file(200, STATIC_DIR / "service-worker.js")
+        if path == "/static/manifest.json":
+            return self._send_file(200, STATIC_DIR / "manifest.json", content_type="application/manifest+json")
+        if path == "/static/backgrounds/user-video.mp4":
+            clip = USER_VIDEO_PATH if USER_VIDEO_PATH.is_file() else LEGACY_VIDEO_PATH
+            return self._send_file(200, clip, cache_control="no-store")
         if path.startswith("/static/"):
             rel = path[len("/static/"):]
             file_path = (STATIC_DIR / rel).resolve()
@@ -547,7 +557,7 @@ class FabGuiHandler(BaseHTTPRequestHandler):
             return self._handle_video_upload()
         if path == "/api/backgrounds/video/delete":
             removed = 0
-            for candidate in BACKGROUNDS_DIR.glob("user-video*.mp4"):
+            for candidate in (USER_VIDEO_PATH, *BACKGROUNDS_DIR.glob("user-video*.mp4")):
                 try:
                     candidate.unlink()
                     removed += 1

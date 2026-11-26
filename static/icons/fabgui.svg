@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>FabGUI</title>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2=".9" y2="1">
+      <stop stop-color="#4b4c51" stop-opacity=".77"/>
+      <stop offset=".48" stop-color="#34353a" stop-opacity=".84"/>
+      <stop offset="1" stop-color="#202126" stop-opacity=".88"/>
+    </linearGradient>
+    <radialGradient id="shine" cx=".24" cy=".03" r=".85">
+      <stop stop-color="#eeeff1" stop-opacity=".13"/>
+      <stop offset="1" stop-color="#eeeff1" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2=".8" y2="1">
+      <stop stop-color="#dbdde1" stop-opacity=".41"/>
+      <stop offset=".5" stop-color="#a0a2a8" stop-opacity=".08"/>
+      <stop offset="1" stop-color="#08090c" stop-opacity=".58"/>
+    </linearGradient>
+    <linearGradient id="badge" x1="0" y1="0" x2=".7" y2="1">
+      <stop stop-color="#b7bac1" stop-opacity=".37"/>
+      <stop offset="1" stop-color="#58595f" stop-opacity=".2"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="0" y1="0" x2=".15" y2="1">
+      <stop stop-color="#f5f6f7"/>
+      <stop offset="1" stop-color="#bfc2c8"/>
+    </linearGradient>
+    <path id="fab" fill-rule="evenodd" d="
+      M28 236 42 164h103l-5 24H81l-2 10h58l-4 18H75l-5 20Z
+      M118 236l52-72h55l25 72h-41l-2-6h-41l-4 6Zm62-26h18l-6-18Z
+      M248 236l13-72h83c19 0 29 7 27 20-1 7-6 12-15 15 9 2 14 8 12 17-2 13-12 20-30 20Zm44-55-2 9h24c5 0 8-2 9-5 0-3-2-4-6-4Zm-6 24-2 10h26c5 0 8-2 9-5 0-4-2-5-6-5Z"/>
+  </defs>
+  <rect x="29" y="34" width="454" height="454" rx="112" fill="#090a0d" fill-opacity=".4"/>
+  <rect x="29" y="28" width="454" height="454" rx="112" fill="url(#tile)"/>
+  <rect x="29" y="28" width="454" height="454" rx="112" fill="url(#shine)" stroke="url(#edge)" stroke-width="2"/>
+  <rect x="38" y="37" width="436" height="436" rx="103" fill="none" stroke="#e4e5e9" stroke-opacity=".055" stroke-width="2"/>
+  <ellipse cx="255" cy="256" rx="172" ry="95" transform="rotate(-21 255 256)"
+    fill="url(#badge)" stroke="#d3d6dc" stroke-opacity=".17" stroke-width="2"/>
+  <use href="#fab" transform="translate(71 77) scale(.92)" fill="#101115" opacity=".55"/>
+  <use href="#fab" transform="translate(71 72) scale(.92)" fill="url(#mark)"/>
+</svg>

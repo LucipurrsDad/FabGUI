@@ -1,564 +1,357 @@
-/* FabGUI appearance + liquid glass.
- *
- * The glass is applied to individual surfaces (header and asset cards) rather
- * than to <body>. Targeting <body> makes liquidGL set pointer-events: none and
- * strip the page background, which is what broke buttons, wallpapers and video
- * in the previous implementation. Header and cards keep their own content above
- * the shared lens canvas, so every control stays clickable.
- */
-const STORAGE_KEY = "fabgui.appearance.v3";
-const DEFAULTS = {
-  wallpaperEnabled: true,
-  wallpaperKind: "lines",   // "lines" | "video" | "dark-bg" | "light-bg"
-  tint: 24,
-  glassFrost: 0,            // global frost in px, applied to every glass surface
-  refractionIndex: 1.50,    // 1.0 = flat, 2.5 = strong edge bend
-  refractionStrength: 0.65, // 0 = flat, 1 = strongest refraction
-  bevelWidth: 0.18,         // edge band as a fraction of the shortest side
-  dim: 24,
-  videoSrc: "",
-};
-const GREY_TINT = [56, 56, 56];
+import { createGlassScene } from "./liquidGL/glass-scene.js";
+
+const STORAGE_KEY = "fabgui.appearance.v4";
 const WALLPAPERS = {
-  "dark-bg": "/static/backgrounds/Gold-Gate-wallpaper-dark.png",
-  "light-bg": "/static/backgrounds/Gold-Gate-wallpaper.png",
+  "dark-bg": ["backgrounds/Gold-Gate-wallpaper-dark.png", "Dark Gold-Gate wallpaper"],
+  "light-bg": ["backgrounds/Gold-Gate-wallpaper.png", "Light Gold-Gate wallpaper"],
+  anniversary: ["backgrounds/zelda40th.jpg", "40th Anniversary"],
 };
-const MAX_CARD_LENSES = 32;
-const CARD_ROOT_MARGIN = "320px";
-
-let settings = { ...DEFAULTS };
-let videoBg = null;
-let wallpaperImage = null;
-let glassReady = false;
-let glassId = 0;
-let cardObserver = null;
-let bodyRenderer = null;
-let snapshotTimer = null;
-const allLenses = new Set();
-const cardLenses = new Map();
-const glassDebug = { entries: [], added: 0, removed: 0, errors: [] };
-
+const percent = (value) => `${Math.round(value * 100)}%`;
+const pixels = (value) => `${value.toFixed(1)} px`;
+const ranges = {
+  glassOptics: [
+    ["tint", "glassTint", "Glass tint", 0, 75, 1, 24, (value) => `${value}%`],
+    ["glassFrost", "glassFrost", "Glass frost", 0, 8, .1, 6, pixels],
+    ["refractionIndex", "glassIndex", "Refractive index", 1, 2.5, .01, 1.5, (value) => value.toFixed(2)],
+    ["refractionStrength", "glassStrength", "Refraction strength", 0, 1, .01, .65, percent],
+    ["thickness", "glassThickness", "Glass thickness", 2, 48, .5, 24, pixels],
+    ["bevelWidth", "glassBevel", "Edge bevel width", .05, .4, .01, .18, (value) => pixels(value * 80)],
+    ["curvature", "glassCurvature", "Edge curvature", 0, 1, .01, .68, percent],
+    ["dispersion", "glassDispersion", "Chromatic dispersion", 0, 1, .01, 0, percent],
+    ["specular", "glassSpecular", "Specular highlights", 0, 1, .01, .8, percent],
+    ["caustics", "glassCaustics", "Caustic shimmer", 0, 1, .01, 0, percent],
+    ["colorBleed", "glassBleed", "Ambient color bleed", 0, 1, .01, 0, percent],
+  ],
+  backgroundEffects: [
+    ["dim", "wallpaperDim", "Background dimming", 0, 70, 1, 24, (value) => `${value}%`],
+    ["bloom", "wallpaperBloom", "Background bloom", 0, 1, .01, 0, percent],
+    ["aurora", "wallpaperAurora", "Procedural aurora", 0, 1, .01, 0, percent],
+    ["particles", "wallpaperParticles", "Atmospheric particles", 0, 1, .01, 0, percent],
+    ["grain", "wallpaperGrain", "Film grain", 0, 1, .01, 0, percent],
+    ["vignette", "wallpaperVignette", "Vignette", 0, 1, .01, 0, percent],
+  ],
+  motionEffects: [
+    ["parallax", "wallpaperParallax", "Scroll parallax", 0, 1, .01, 0, percent],
+  ],
+  videoEffects: [
+    ["videoSpeed", "videoSpeed", "Video speed", .25, 2, .25, 1, (value) => `${value}×`],
+  ],
+};
+const checks = ["wallpaperEnabled", "effectsMotion", "videoPlay", "videoLoop"];
+const defaults = {
+  wallpaperKind: "lines", videoSrc: "",
+  ...Object.fromEntries(checks.map((key) => [key, true])),
+  ...Object.fromEntries(Object.values(ranges).flat().map(([key, , , , , , initial]) => [key, initial])),
+};
+const presets = [
+  ["Clear Glass", { tint: 16, glassFrost: 0, dispersion: .16 }],
+  ["Soft Frost", { tint: 31, glassFrost: 7, specular: .55, refractionStrength: .38 }],
+  ["Aurora Glow", { tint: 29, dispersion: .35, colorBleed: .45, bloom: .30, aurora: .75, caustics: .25, vignette: .4 }],
+];
 const $ = (selector) => document.querySelector(selector);
+const byId = (id) => document.getElementById(id);
+const status = (message) => { byId("wallpaperStatus").textContent = message; };
 
-function clamp(value, min, max, fallback) {
-  const number = Number(value);
-  return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
-}
-
-function loadSettings() {
-  let stored = {};
-  try { stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null") || {}; } catch (error) { stored = {}; }
-
-  // The previous key used a much weaker refraction mapping. Carry only the
-  // background choice over so the new glass starts with the new defaults.
-  if (!Object.keys(stored).length) {
-    try {
-      const legacy = JSON.parse(localStorage.getItem("fabgui.appearance.v2") || "{}");
-      stored = {
-        wallpaperEnabled: legacy.wallpaperEnabled,
-        wallpaperKind: legacy.wallpaperKind,
-        dim: legacy.dim,
-        videoSrc: legacy.videoSrc,
-      };
-    } catch (error) { stored = {}; }
+function normalize(stored = {}) {
+  const settings = { ...defaults };
+  for (const [key, , , min, max] of Object.values(ranges).flat()) {
+    const value = Number(stored[key]);
+    if (stored[key] != null && Number.isFinite(value)) settings[key] = Math.min(max, Math.max(min, value));
   }
-
-  const kind = ["lines", "video", "dark-bg", "light-bg"].includes(stored.wallpaperKind)
-    ? stored.wallpaperKind : DEFAULTS.wallpaperKind;
-  settings = {
-    wallpaperEnabled: stored.wallpaperEnabled !== false,
-    wallpaperKind: kind,
-    tint: clamp(stored.tint, 0, 75, DEFAULTS.tint),
-    glassFrost: clamp(stored.glassFrost, 0, 8, DEFAULTS.glassFrost),
-    refractionIndex: clamp(stored.refractionIndex, 1.0, 2.5, DEFAULTS.refractionIndex),
-    refractionStrength: clamp(stored.refractionStrength, 0, 1, DEFAULTS.refractionStrength),
-    bevelWidth: clamp(stored.bevelWidth, 0.05, 0.4, DEFAULTS.bevelWidth),
-    dim: clamp(stored.dim, 0, 70, DEFAULTS.dim),
-    videoSrc: typeof stored.videoSrc === "string" ? stored.videoSrc : "",
-  };
-  if (settings.wallpaperKind === "video" && !settings.videoSrc) settings.wallpaperKind = "lines";
-}
-
-function saveSettings() {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(settings)); } catch (error) {}
-}
-
-function tintValue() {
-  return `rgba(${GREY_TINT.join(", ")}, ${(settings.tint / 100).toFixed(3)})`;
-}
-
-function tintArray() {
-  return [GREY_TINT[0] / 255, GREY_TINT[1] / 255, GREY_TINT[2] / 255, settings.tint / 100];
-}
-
-/* liquidGL's offsets are fractions of the backdrop texture. These values are
-   deliberately stronger than the library defaults because the lenses here are
-   cards and a header, not a full-screen pane; the old 0.024 offset was too
-   subtle to read as refraction on a low-contrast line background. */
-function lensPhysics() {
-  const strength = settings.refractionStrength;
-  const bend = Math.max(0, settings.refractionIndex - 1);
-  return {
-    refraction: strength * (0.06 + bend * 0.05),
-    bevelDepth: strength * (0.04 + bend * 0.12),
-    // The shader turns frost into blur(frost * 4px). Dividing here makes the
-    // global frost slider mean the same number of pixels as the CSS fallback.
-    frost: settings.glassFrost / 4,
-  };
-}
-
-function updateStatus() {
-  const status = $("#wallpaperStatus");
-  if (!status) return;
-  if (settings.wallpaperKind === "video") {
-    status.textContent = settings.videoSrc ? "Video background" : "Choose a video to use as the background";
-  } else if (settings.wallpaperKind === "dark-bg") {
-    status.textContent = "Dark Gold-Gate wallpaper";
-  } else if (settings.wallpaperKind === "light-bg") {
-    status.textContent = "Light Gold-Gate wallpaper";
-  } else {
-    status.textContent = settings.wallpaperEnabled ? "Slow flowing glass lines" : "Glass lines paused";
+  for (const key of checks) {
+    if (typeof stored[key] === "boolean") settings[key] = stored[key];
   }
+  if (["lines", "video", ...Object.keys(WALLPAPERS)].includes(stored.wallpaperKind)) settings.wallpaperKind = stored.wallpaperKind;
+  if (typeof stored.videoSrc === "string") settings.videoSrc = stored.videoSrc;
+  return settings;
 }
 
-function updateVideo() {
-  if (!videoBg) return;
-  const useVideo = settings.wallpaperKind === "video" && Boolean(settings.videoSrc);
-  if (!useVideo) {
-    videoBg.style.display = "none";
-    try { videoBg.pause(); } catch (error) {}
-    return;
-  }
-
-  videoBg.style.display = "block";
-  if (videoBg.dataset.src !== settings.videoSrc) {
-    videoBg.dataset.src = settings.videoSrc;
-    videoBg.src = settings.videoSrc;
-    videoBg.load();
-  }
-  const play = () => {
-    videoBg.muted = true;
-    const attempt = videoBg.play();
-    if (attempt && typeof attempt.catch === "function") attempt.catch(() => {});
-  };
-  if (videoBg.readyState >= 2) play();
-  else videoBg.addEventListener("canplay", play, { once: true });
-}
-
-function updateBackground() {
-  const motion = settings.wallpaperEnabled && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const root = document.documentElement;
-  const body = document.body;
-  const stage = $(".background-stage");
-
-  root.classList.toggle("background-motion-off", !motion);
-  root.classList.toggle("no-liquid-glass", !glassReady);
-  root.style.setProperty("--wallpaper-dim", (settings.dim / 100).toFixed(2));
-  root.style.setProperty("--glass-frost", `${settings.glassFrost}px`);
-  root.style.setProperty("--glass-tint-alpha", (settings.tint / 100).toFixed(3));
-  root.style.setProperty("--line-opacity", motion ? "0.88" : "0.5");
-  root.style.setProperty("--line-speed", motion ? "24s" : "0s");
-
-  const kind = settings.wallpaperKind;
-  body.classList.toggle("lines-bg", kind === "lines" || (kind === "video" && !settings.videoSrc));
-  body.classList.toggle("has-dark-bg", kind === "dark-bg");
-  body.classList.toggle("has-light-bg", kind === "light-bg");
-  body.classList.toggle("has-video-bg", kind === "video" && Boolean(settings.videoSrc));
-
-  // The wallpaper lives on the fixed stage, not <body>, so liquidGL can
-  // capture it. Capturing <body> previously pulled in every card and produced
-  // a 37,000px-tall texture that lost the WebGL context.
-  // The wallpaper is a real <img> inside the fixed stage. liquidGL's DOM
-  // rasteriser can draw an already-decoded <img> synchronously, while a CSS
-  // background-image could be skipped when the capture raced the image load.
-  if (stage) stage.style.backgroundImage = "";
-  if (wallpaperImage) {
-    const source = WALLPAPERS[kind] || "";
-    if (source) {
-      if (wallpaperImage.getAttribute("src") !== source) wallpaperImage.src = source;
-      wallpaperImage.classList.add("active");
-    } else {
-      wallpaperImage.classList.remove("active");
-      wallpaperImage.removeAttribute("src");
-    }
-  }
-  body.style.removeProperty("--bg-image");
-
-  updateVideo();
-  updateStatus();
-  refreshSnapshots();
-}
-
-function refreshSnapshots(delay = 220) {
-  if (snapshotTimer) clearTimeout(snapshotTimer);
-  snapshotTimer = setTimeout(() => {
-    snapshotTimer = null;
-    const renderers = new Set();
-    for (const lens of allLenses) {
-      if (lens && !lens._destroyed && lens.renderer) renderers.add(lens.renderer);
-    }
-    for (const renderer of renderers) {
-      try { renderer.captureSnapshot(); } catch (error) {}
-    }
-  }, delay);
-}
-
-function lensOptions(header = false) {
-  const headerElement = document.querySelector("header.top");
-  const headerZ = headerElement ? parseInt(getComputedStyle(headerElement).zIndex, 10) || 0 : 0;
-  return {
-    engine: "auto",
-    // The page can be tens of thousands of pixels tall (604 cards). Capturing
-    // <body> would upload a giant texture and lose the WebGL context, so the
-    // glass refracts only the fixed background layer behind the interface.
-    snapshot: ".background-stage",
-    target: "body", // replaced per call
-    resolution: 1.5,
-    // For an element that is its own liquidGL anchor (the sticky header), the
-    // lens z-index is relative to that element. Matching its computed z-index
-    // puts the glass canvas just behind its content instead of far behind the
-    // page (-200), which previously produced a lost WebGL context.
-    zIndex: header ? headerZ : 50,
-    content: false,
-    refraction: lensPhysics().refraction,
-    aberration: 0,
-    bevelDepth: lensPhysics().bevelDepth,
-    bevelWidth: settings.bevelWidth,
-    frost: lensPhysics().frost,
-    shadow: true,
-    specular: true,
-    reveal: "none",
-    tilt: false,
-    draggable: false,
-    interaction: "none",
-    magnify: 1,
-    tint: tintValue(),
-    helper: false,
-  };
-}
-
-function applyLensOptions(lens) {
-  if (!lens || lens._destroyed || !lens.options) return;
-  const physics = lensPhysics();
-  lens.options.refraction = physics.refraction;
-  lens.options.bevelDepth = physics.bevelDepth;
-  lens.options.bevelWidth = settings.bevelWidth;
-  lens.options.frost = physics.frost;
-  try { lens.setTint(tintValue()); } catch (error) {}
-}
-
-function updateLensOptions() {
-  for (const lens of allLenses) {
-    if (!lens || lens._destroyed) { allLenses.delete(lens); continue; }
-    applyLensOptions(lens);
-  }
-}
-
-function createLens(target, header = false) {
-  if (!glassReady || typeof window.liquidGL !== "function") return null;
+function readStorage(key) {
   try {
-    const lens = window.liquidGL({ ...lensOptions(header), target });
-    if (Array.isArray(lens)) lens.forEach((item) => allLenses.add(item));
-    else if (lens) allLenses.add(lens);
-    return lens;
-  } catch (error) {
-    console.warn("FabGUI: liquid glass could not initialise", target, error);
+    const value = JSON.parse(localStorage.getItem(key));
+    return value && typeof value === "object" ? value : null;
+  } catch {
     return null;
   }
 }
 
-function internalOptions(header = false) {
-  const options = lensOptions(header);
-  // Public liquidGL() parses colour strings; renderer.addLens() expects the
-  // already-normalised [r, g, b, a] array.
-  options.tint = tintArray();
-  return options;
+function loadAppearance() {
+  const stored = readStorage(STORAGE_KEY);
+  const legacy = stored?.current ? null : [3, 2, 1].map((version) => readStorage(`fabgui.appearance.v${version}`))
+    .find((value) => value && Object.keys(value).length);
+  return {
+    current: normalize(stored?.current || legacy),
+    saved: stored?.saved ? normalize(stored.saved) : null,
+    custom: Array.isArray(stored?.custom) ? stored.custom
+      .filter((entry) => entry && typeof entry.name === "string" && entry.settings)
+      .map((entry) => ({ name: entry.name, settings: normalize(entry.settings) })) : [],
+  };
 }
 
-function initHeaderGlass() {
-  const header = $("header.top");
-  if (!header || header.dataset.fabguiGlass) return;
-  header.dataset.fabguiGlass = "header";
-  createLens("header.top", true);
-}
+const appearance = loadAppearance();
+let storageWarned = false;
+let videoBusy = false;
+const video = byId("videoWallpaper");
+const image = byId("wallpaperImage");
+const picker = byId("appearancePresets");
+const backdropInputs = document.querySelectorAll('input[name="wallpaperKind"]');
+const scene = createGlassScene({
+  canvas: byId("glassViewport"), image, video,
+  grid: byId("resultsGrid"), paths: document.querySelectorAll("#lineArtwork path"),
+  onFailure(error) { console.error("FabGUI liquid glass:", error); },
+});
+Object.defineProperty(window, "__fabguiGlass", { get: () => scene.stats });
 
-function initToolbarGlass() {
-  const tools = $("#filterPanel");
-  if (!tools || tools.dataset.fabguiGlass) return;
-  tools.dataset.fabguiGlass = "toolbar";
-  // The filter bar and the cards share the body-level lens canvas. The
-  // downloads panel stays on CSS glass because it becomes position:fixed while
-  // a download is active, and liquidGL does not track fixed targets.
-  const lens = createLens("#filterPanel", false);
-  const first = Array.isArray(lens) ? lens[0] : lens;
-  if (first && first.renderer) bodyRenderer = first.renderer;
-}
-
-function removeCardLens(card) {
-  const lens = cardLenses.get(card);
-  if (lens) {
-    try { lens.destroy(); } catch (error) {}
-    allLenses.delete(lens);
-    cardLenses.delete(card);
-    glassDebug.removed++;
-  }
-  // Keep observing the card. Unobserving here made every card that started
-  // off-screen permanent: it never received an entry when it later scrolled
-  // into view, so only the first viewport of cards ever got glass.
-}
-
-function addCardLens(card) {
-  if (!glassReady || !card.isConnected || cardLenses.has(card)) return;
-  if (cardLenses.size >= MAX_CARD_LENSES) return;
-  if (!card.dataset.fabguiGlassId) card.dataset.fabguiGlassId = `card-${++glassId}`;
-
-  // Every public liquidGL() call creates a throwaway WebGL probe context.
-  // Calling it once per card exhausted Chrome's context budget after a short
-  // scroll, which is why the glass stopped refracting. Reuse the renderer that
-  // already owns the body canvas instead.
-  let lens = null;
-  if (bodyRenderer && !bodyRenderer._destroyed) {
-    try {
-      lens = bodyRenderer.addLens(card, internalOptions(false));
-      allLenses.add(lens);
-    } catch (error) {
-      glassDebug.errors.push(`addLens: ${error.message}`);
-      lens = null;
+function persist() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(appearance));
+  } catch (error) {
+    if (!storageWarned) {
+      console.warn("FabGUI could not save appearance in this browser", error);
+      storageWarned = true;
     }
-  }
-  if (!lens) lens = createLens(`[data-fabgui-glass-id="${card.dataset.fabguiGlassId}"]`, false);
-  if (lens) {
-    cardLenses.set(card, Array.isArray(lens) ? lens[0] : lens);
-    glassDebug.added++;
+    byId("appearanceFeedback").textContent = "This browser could not save the settings.";
   }
 }
 
-function scanCards() {
-  if (!cardObserver) return;
-  for (const [card] of cardLenses) {
-    if (!card.isConnected) {
-      removeCardLens(card);
-    }
+function updateVideo() {
+  const { wallpaperKind, videoSrc, videoLoop, videoSpeed, videoPlay } = appearance.current;
+  if (wallpaperKind !== "video" || !videoSrc || document.hidden) {
+    video.pause();
+    return;
   }
-  document.querySelectorAll("#resultsGrid .asset-card").forEach((card) => {
-    if (!card.dataset.fabguiGlassId) card.dataset.fabguiGlassId = `card-${++glassId}`;
-    if (!cardLenses.has(card)) cardObserver.observe(card);
-  });
-}
-
-function setupCardGlass() {
-  if (!glassReady || typeof IntersectionObserver === "undefined") return;
-  cardObserver = new IntersectionObserver((entries) => {
-    entries.forEach((entry) => {
-      glassDebug.entries.push({ id: entry.target.dataset.fabguiGlassId, vis: entry.isIntersecting, ratio: Math.round(entry.intersectionRatio * 100) / 100, top: Math.round(entry.boundingClientRect.top) });
-      if (entry.isIntersecting) addCardLens(entry.target);
-      else removeCardLens(entry.target);
+  if (video.getAttribute("src") !== videoSrc) video.src = videoSrc;
+  video.loop = videoLoop;
+  if (video.playbackRate !== videoSpeed) video.playbackRate = videoSpeed;
+  if (!videoPlay) {
+    video.pause();
+  } else if (video.paused && !video.ended) {
+    video.play().catch((error) => {
+      if (error.name !== "AbortError" && appearance.current.wallpaperKind === "video") {
+        status("Video playback could not start. Check the saved clip or try Restart video.");
+      }
     });
-    glassDebug.entries = glassDebug.entries.slice(-120);
-  }, { rootMargin: CARD_ROOT_MARGIN, threshold: 0.01 });
-
-  scanCards();
-  window.addEventListener("fabgui:results-rendered", scanCards);
-  const grid = $("#resultsGrid");
-  if (grid) {
-    new MutationObserver(scanCards).observe(grid, { childList: true });
   }
+}
+
+function updateWallpaper() {
+  const { wallpaperKind, wallpaperEnabled, videoSrc, videoPlay } = appearance.current;
+  const wallpaper = WALLPAPERS[wallpaperKind];
+  if (wallpaper) {
+    const source = new URL(wallpaper[0], import.meta.url).href;
+    if (image.src !== source) image.src = source;
+  } else if (image.hasAttribute("src")) {
+    image.removeAttribute("src");
+  }
+  if (!videoSrc && video.hasAttribute("src")) {
+    video.removeAttribute("src");
+    video.load();
+  }
+  if (!videoBusy) {
+    if (wallpaper) status(wallpaper[1]);
+    else if (wallpaperKind === "video") {
+      status(videoSrc ? (videoPlay ? "Video background selected" : "Video paused") : "Choose a clip to preview it here.");
+    }
+    else status(wallpaperEnabled ? "Slow flowing glass lines" : "Glass lines paused");
+  }
+  byId("removeVideo").disabled = videoBusy || !videoSrc;
+  byId("restartVideo").disabled = videoBusy || !videoSrc || wallpaperKind !== "video";
+  byId("chooseVideo").textContent = videoSrc ? "Replace video…" : "Choose video…";
+  byId("videoSettings").hidden = wallpaperKind !== "video";
+  byId("videoPlayback").hidden = !videoSrc;
+  updateVideo();
 }
 
 function renderSettings() {
-  const controls = {
-    wallpaperEnabled: $("#wallpaperEnabled"),
-    glassTint: $("#glassTint"),
-    glassFrost: $("#glassFrost"),
-    glassIndex: $("#glassIndex"),
-    glassStrength: $("#glassStrength"),
-    glassBevel: $("#glassBevel"),
-    wallpaperDim: $("#wallpaperDim"),
-  };
-  if (controls.wallpaperEnabled) controls.wallpaperEnabled.checked = settings.wallpaperEnabled;
-  if (controls.glassTint) controls.glassTint.value = settings.tint;
-  if ($("#glassTintValue")) $("#glassTintValue").value = `${settings.tint}%`;
-  if (controls.glassFrost) controls.glassFrost.value = settings.glassFrost;
-  if ($("#glassFrostValue")) $("#glassFrostValue").value = settings.glassFrost.toFixed(1);
-  if (controls.glassIndex) controls.glassIndex.value = settings.refractionIndex;
-  if ($("#glassIndexValue")) $("#glassIndexValue").value = settings.refractionIndex.toFixed(2);
-  if (controls.glassStrength) controls.glassStrength.value = settings.refractionStrength;
-  if ($("#glassStrengthValue")) $("#glassStrengthValue").value = `${(settings.refractionStrength * 100).toFixed(0)}%`;
-  if (controls.glassBevel) controls.glassBevel.value = settings.bevelWidth;
-  if ($("#glassBevelValue")) $("#glassBevelValue").value = `${(settings.bevelWidth * 100).toFixed(0)}%`;
-  if (controls.wallpaperDim) controls.wallpaperDim.value = settings.dim;
-  if ($("#wallpaperDimValue")) $("#wallpaperDimValue").value = `${settings.dim}%`;
-  document.querySelectorAll('input[name="wallpaperKind"]').forEach((element) => {
-    element.checked = element.value === settings.wallpaperKind;
-  });
-  const videoInput = $("#videoFile");
-  if (videoInput) videoInput.value = "";
-  updateBackground();
-  updateLensOptions();
-  saveSettings();
+  const settings = appearance.current;
+  for (const [key, id, , , , , , format] of Object.values(ranges).flat()) {
+    byId(id).value = settings[key];
+    byId(`${id}Value`).value = format(settings[key]);
+  }
+  for (const key of checks) byId(key).checked = settings[key];
+  backdropInputs.forEach((input) => { input.checked = input.value === settings.wallpaperKind; });
+  byId("restoreAppearance").disabled = !appearance.saved;
+  updateWallpaper();
+  scene.update(settings);
+  persist();
 }
 
-function setVideoStatus(message) {
-  const status = $("#wallpaperStatus");
-  if (status) status.textContent = message;
+function edit(key, value) {
+  appearance.current[key] = value;
+  picker.value = "";
+  renderSettings();
 }
 
-async function uploadVideo(file) {
-  if (!file) return;
-  setVideoStatus(`Converting ${file.name} with ffmpeg…`);
+function addRanges() {
+  for (const [group, controls] of Object.entries(ranges)) {
+    for (const [key, id, label, min, max, step] of controls) {
+      const title = document.createElement("label");
+      title.className = "appearance-range-label";
+      title.htmlFor = id;
+      const caption = document.createElement("span");
+      caption.textContent = label;
+      const value = document.createElement("output");
+      value.id = `${id}Value`;
+      value.htmlFor = id;
+      title.append(caption, value);
+      const input = document.createElement("input");
+      Object.assign(input, { id, type: "range", min, max, step, className: "appearance-range" });
+      input.addEventListener("input", () => edit(key, input.valueAsNumber));
+      byId(group).append(title, input);
+    }
+  }
+}
+
+function renderPresets() {
+  picker.replaceChildren(new Option("Choose a preset…", ""));
+  const included = document.createElement("optgroup");
+  included.label = "Built-in presets";
+  presets.forEach(([name], index) => included.append(new Option(name, `built-in:${index}`)));
+  picker.append(included);
+  if (appearance.custom.length) {
+    const custom = document.createElement("optgroup");
+    custom.label = "Custom presets";
+    appearance.custom.forEach(({ name }, index) => custom.append(new Option(name, `custom:${index}`)));
+    picker.append(custom);
+  }
+}
+
+function restoreSettings(settings) {
+  appearance.current = { ...settings, videoSrc: appearance.current.videoSrc };
+  renderSettings();
+}
+
+function setVideoBusy(busy) {
+  videoBusy = busy;
+  byId("videoFile").disabled = busy;
+  byId("chooseVideo").disabled = busy;
+  updateWallpaper();
+}
+
+async function updateSavedVideo(file) {
+  if (videoBusy) return;
+  setVideoBusy(true);
+  status(file ? `Converting ${file.name} with ffmpeg…` : "Removing background video…");
+  let message;
   try {
-    const response = await fetch("/api/backgrounds/video", {
+    const response = await fetch(file ? "/api/backgrounds/video" : "/api/backgrounds/video/delete", {
       method: "POST",
-      headers: {
-        "Content-Type": file.type || "application/octet-stream",
-        "X-Filename": encodeURIComponent(file.name || "background-video"),
-      },
-      body: file,
+      ...(file && {
+        headers: { "Content-Type": file.type || "application/octet-stream", "X-Filename": encodeURIComponent(file.name) },
+        body: file,
+      }),
     });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok || !result.ok) throw new Error(result.message || "Video conversion failed");
-    settings.videoSrc = result.url;
-    settings.wallpaperKind = "video";
-    renderSettings();
-    setVideoStatus("Video background ready");
-    if (typeof window.toast === "function") window.toast("Video background ready", "success");
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.message || "Video update failed");
+    if (file) {
+      appearance.current.videoSrc = result.url;
+      edit("wallpaperKind", "video");
+    } else {
+      edit("videoSrc", "");
+    }
+    message = file ? "Video background ready" : "Video background removed";
+    window.toast?.(message, "success");
   } catch (error) {
-    setVideoStatus(`Video failed: ${error.message}`);
-    if (typeof window.toast === "function") window.toast(`Video failed: ${error.message}`, "error");
+    message = `Video update failed: ${error.message}`;
+    window.toast?.(message, "error");
+  } finally {
+    setVideoBusy(false);
+    status(message);
+    byId("videoFile").value = "";
   }
 }
 
-async function removeVideo() {
-  try {
-    await fetch("/api/backgrounds/video/delete", { method: "POST" });
-  } catch (error) {}
-  settings.videoSrc = "";
-  if (settings.wallpaperKind === "video") settings.wallpaperKind = "lines";
+addRanges();
+renderPresets();
+for (const key of checks) byId(key).addEventListener("change", (event) => edit(key, event.target.checked));
+backdropInputs.forEach((input) => input.addEventListener("change", () => edit("wallpaperKind", input.value)));
+byId("chooseVideo").addEventListener("click", () => byId("videoFile").click());
+byId("videoFile").addEventListener("change", ({ target }) => {
+  if (target.files[0]) updateSavedVideo(target.files[0]);
+});
+byId("removeVideo").addEventListener("click", () => updateSavedVideo(null));
+byId("restartVideo").addEventListener("click", () => {
+  if (video.readyState) video.currentTime = 0;
+  edit("videoPlay", true);
+});
+video.addEventListener("error", () => status("Saved video could not be played. Upload it again."));
+image.addEventListener("error", () => status("The wallpaper image could not be loaded."));
+document.addEventListener("visibilitychange", updateVideo);
+
+const feedback = byId("appearanceFeedback");
+picker.addEventListener("change", () => {
+  if (!picker.value) return;
+  const [type, index] = picker.value.split(":");
+  if (type === "custom") {
+    restoreSettings(appearance.custom[index].settings);
+  } else {
+    const visualDefaults = Object.fromEntries([...ranges.glassOptics, ...ranges.backgroundEffects].map(([key]) => [key, defaults[key]]));
+    restoreSettings({ ...appearance.current, ...visualDefaults, ...presets[index][1] });
+  }
+});
+byId("saveAppearancePreset").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const input = byId("appearancePresetName");
+  const name = input.value.trim();
+  if (!name) {
+    feedback.textContent = "Enter a name for your preset.";
+    return;
+  }
+  const settings = { ...appearance.current };
+  const existing = appearance.custom.findIndex((preset) => preset.name === name);
+  const index = existing < 0 ? appearance.custom.length : existing;
+  appearance.custom[index] = { name, settings };
+  appearance.saved = settings;
+  renderPresets();
+  picker.value = `custom:${index}`;
+  input.value = "";
+  feedback.textContent = `Saved “${name}”.`;
   renderSettings();
-  setVideoStatus("Video background removed");
+});
+byId("resetAppearance").addEventListener("click", () => {
+  picker.value = "";
+  feedback.textContent = "Restored default appearance.";
+  restoreSettings(defaults);
+});
+byId("restoreAppearance").addEventListener("click", () => {
+  picker.value = "";
+  feedback.textContent = "Restored your last saved appearance.";
+  restoreSettings(appearance.saved);
+});
+
+const menu = byId("appearanceMenu");
+const appearanceTabs = [...menu.querySelectorAll('[role="tab"]')];
+function selectAppearanceTab(tab) {
+  for (const item of appearanceTabs) {
+    const selected = item === tab;
+    item.setAttribute("aria-selected", String(selected));
+    item.tabIndex = selected ? 0 : -1;
+    byId(item.getAttribute("aria-controls")).hidden = !selected;
+  }
+  menu.querySelector(".appearance-scroll").scrollTop = 0;
 }
-
-function bindSettings() {
-  const on = (selector, event, handler) => {
-    const element = $(selector);
-    if (element) element.addEventListener(event, handler);
-  };
-
-  on("#wallpaperEnabled", "change", (event) => {
-    settings.wallpaperEnabled = event.target.checked;
-    renderSettings();
-  });
-  document.querySelectorAll('input[name="wallpaperKind"]').forEach((element) => {
-    element.addEventListener("change", (event) => {
-      settings.wallpaperKind = event.target.value;
-      renderSettings();
-    });
-  });
-  on("#glassTint", "input", (event) => {
-    settings.tint = clamp(event.target.value, 0, 75, DEFAULTS.tint);
-    renderSettings();
-  });
-  on("#glassFrost", "input", (event) => {
-    settings.glassFrost = clamp(event.target.value, 0, 8, DEFAULTS.glassFrost);
-    renderSettings();
-  });
-  on("#glassIndex", "input", (event) => {
-    settings.refractionIndex = clamp(event.target.value, 1.0, 2.5, DEFAULTS.refractionIndex);
-    renderSettings();
-  });
-  on("#glassStrength", "input", (event) => {
-    settings.refractionStrength = clamp(event.target.value, 0, 1, DEFAULTS.refractionStrength);
-    renderSettings();
-  });
-  on("#glassBevel", "input", (event) => {
-    settings.bevelWidth = clamp(event.target.value, 0.05, 0.4, DEFAULTS.bevelWidth);
-    renderSettings();
-  });
-  on("#wallpaperDim", "input", (event) => {
-    settings.dim = clamp(event.target.value, 0, 70, DEFAULTS.dim);
-    renderSettings();
-  });
-  on("#videoFile", "change", (event) => {
-    const file = event.target.files && event.target.files[0];
-    if (file) uploadVideo(file);
-  });
-  on("#removeVideo", "click", (event) => {
+for (const [index, tab] of appearanceTabs.entries()) {
+  tab.addEventListener("click", () => selectAppearanceTab(tab));
+  tab.addEventListener("keydown", (event) => {
+    const next = {
+      ArrowLeft: (index + appearanceTabs.length - 1) % appearanceTabs.length,
+      ArrowRight: (index + 1) % appearanceTabs.length,
+      Home: 0,
+      End: appearanceTabs.length - 1,
+    }[event.key];
+    if (next === undefined) return;
     event.preventDefault();
-    removeVideo();
-  });
-  on("#resetAppearance", "click", () => {
-    settings = { ...DEFAULTS, videoSrc: settings.videoSrc };
-    renderSettings();
-    setVideoStatus(settings.videoSrc ? "Settings reset. Choose Video to use your saved clip." : "Settings reset");
-  });
-  document.addEventListener("click", (event) => {
-    const menu = $("#appearanceMenu");
-    if (menu && menu.open && !menu.contains(event.target)) menu.open = false;
-  });
-  const menu = $("#appearanceMenu");
-  if (menu) {
-    menu.addEventListener("toggle", () => {
-      document.body.classList.toggle("appearance-open", menu.open);
-    });
-  }
-  document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") return;
-    const menu = $("#appearanceMenu");
-    if (menu) menu.open = false;
+    selectAppearanceTab(appearanceTabs[next]);
+    appearanceTabs[next].focus();
   });
 }
-
-function bootAppearance() {
-  loadSettings();
-  bindSettings();
-
-  // Small read-only diagnostics hook used by the appearance tests and the
-  // browser console. It never drives rendering.
-  window.__fabguiGlass = {
-    get renderer() { return bodyRenderer; },
-    get cards() { return cardLenses; },
-    get observer() { return cardObserver; },
-    get debug() { return glassDebug; },
-    addCardLens,
-    scanCards,
-  };
-
-  wallpaperImage = document.querySelector("#wallpaperImage");
-  if (wallpaperImage) {
-    wallpaperImage.addEventListener("load", () => refreshSnapshots(0));
+document.addEventListener("click", (event) => {
+  if (menu.open && !menu.contains(event.target)) menu.open = false;
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && menu.open) {
+    menu.open = false;
+    menu.querySelector("summary").focus();
   }
-
-  videoBg = document.createElement("video");
-  videoBg.id = "videoWallpaper";
-  videoBg.muted = true;
-  videoBg.defaultMuted = true;
-  videoBg.loop = true;
-  videoBg.playsInline = true;
-  videoBg.autoplay = true;
-  videoBg.preload = "auto";
-  videoBg.setAttribute("muted", "");
-  videoBg.setAttribute("playsinline", "");
-  videoBg.setAttribute("aria-hidden", "true");
-  videoBg.style.display = "none";
-  videoBg.addEventListener("error", () => {
-    setVideoStatus("Saved video could not be played. Upload it again.");
-  });
-  videoBg.addEventListener("loadeddata", () => refreshSnapshots(0));
-  const stage = document.querySelector(".background-stage");
-  (stage || document.body).appendChild(videoBg);
-
-  glassReady = typeof window.liquidGL === "function";
-  if (!glassReady) {
-    console.warn("FabGUI: liquidGL not loaded; using the CSS glass fallback");
-    document.documentElement.classList.add("no-liquid-glass");
-  }
-
-  renderSettings();
-  if (glassReady) {
-    initHeaderGlass();
-    initToolbarGlass();
-    setupCardGlass();
-  }
-}
-
-document.addEventListener("DOMContentLoaded", bootAppearance, { once: true });
+});
+renderSettings();

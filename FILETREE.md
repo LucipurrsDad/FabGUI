@@ -1,24 +1,56 @@
 # File Tree — FabGUI
 
-## Project root (`/home/gamer/projects/FabGUI/`)
-- `server.py` — Python HTTP server + FabCLI wrapper (serves static/, API endpoints incl. /api/auth/*, /api/jobs/{jid}/progress SSE, /api/auth/whoami)
-- `static/index.html` — page structure, header, download modal, auth panel (tab-auth), background-lines SVG, downloads table (#jobsTable), appearance settings
-- `static/app.js` — library loading, search, filters, sorting, card behavior, download flow, auth UI, toast(); exposes helpers on `window`
-- `static/style.css` — shared styling (theme vars, cards, modal, toast, downloads table)
-- `static/appearance.css` — liquid-glass styling + procedural line animations, --glass-frost CSS var on all glass elements, canvas click-through fix
-- `static/appearance.js` — appearance settings UI + liquid-gl@3.0.0 factory init (tint/glassFrost/refractionIndex/refractionStrength/wallpaperKind/videoSrc/dim)
-- `static/interaction-fix.js` — click handling so download dialog opens over glass canvas; calls `window.addJobRow`/`window.toast` for progress + toast
-- `static/engine-sort.js` — engine-cap filter/sort overrides
-- `static/LIQUIDGL-NOTICE.txt` — liquid-gl loaded from jsDelivr CDN (not vendored); MIT, © NaughtyDuk
-- `static/backgrounds/` — served copy of wallpaper PNGs
-- `backgrounds/Gold-Gate-wallpaper.png` — light wallpaper choice
-- `backgrounds/Gold-Gate-wallpaper-dark.png` — dark wallpaper choice
-- `settings.json` — runtime settings (fabcli_path, download_dir)
-- `README.md` — installation, usage, appearance, troubleshooting docs (fully rewritten)
-- `install.sh` — Arch/CachyOS installer (includes ffmpeg dependency)
-- `update.sh` — updater for the latest public `main` version
-- `LICENSE`, `.gitignore`, `docs/screenshots/`, `SESSION.md`, `FILETREE.md`
+```text
+FabGUI/
+├── .gitignore                         Ignore caches and local video files
+├── FILETREE.md                        Repository layout and file purposes
+├── LICENSE                            FabGUI's MIT license
+├── README.md                          Installation, PWA, appearance and troubleshooting
+├── SESSION.md                         Local release progress and verification
+├── Screenshot_20261126_030158.png      Existing UI screenshot
+├── Screenshot_20261126_030433.png      Existing UI screenshot
+├── install.sh                         Userspace installer for pacman and apt distributions
+├── server.py                          Loopback HTTP service, FabCLI jobs and background videos
+├── settings.json                      Default local FabCLI and download directory settings
+├── update.sh                          Updater for the latest public main archive
+├── backgrounds/
+│   ├── Gold-Gate-wallpaper-dark.png     Dark Gold-Gate source wallpaper
+│   ├── Gold-Gate-wallpaper.png          Light Gold-Gate source wallpaper
+│   └── zelda40th.jpg                    40th Anniversary source wallpaper
+├── docs/
+│   ├── demos/
+│   │   ├── FabGUIShowcase.qml          Qt Quick window and ten-second playback controls
+│   │   ├── fabgui-showcase.webp        Recorded showcase loop embedded in the README
+│   │   └── glass-showcase.html         Crystal, Prism and Aurora scene using the app shader
+│   └── screenshots/
+│       ├── fabgui-glass-demo.gif        Looping liquid-glass demo for the README
+│       └── fabgui-pre-liquid-glass.png  Screenshot of the original UI
+└── static/
+    ├── LIQUIDGL-NOTICE.txt             Attribution for the adapted LiquidGL optics
+    ├── app.js                         Library, filters, jobs, downloads and authentication UI
+    ├── appearance.css                 Optical layers and tabbed appearance panel styling
+    ├── appearance.js                  Appearance controls, settings migration and presets
+    ├── engine-sort.js                 Library engine range and sorting integration
+    ├── fab.jpeg                       FabGUI branding artwork
+    ├── index.html                     App shell, dialogs, appearance panel and line artwork
+    ├── install-app.js                 Browser installation prompt control
+    ├── manifest.json                  PWA identity, launch scope, display mode and icons
+    ├── service-worker.js              Network-only PWA navigation and backend error response
+    ├── style.css                      Shared UI styling
+    ├── backgrounds/
+    │   ├── Gold-Gate-wallpaper-dark.png Bundled dark wallpaper
+    │   ├── Gold-Gate-wallpaper.png      Bundled light wallpaper
+    │   └── zelda40th.jpg                Bundled 40th Anniversary wallpaper
+    ├── icons/
+    │   ├── fabgui-192.png               192 px application icon
+    │   ├── fabgui-512.png               512 px application icon
+    │   ├── fabgui-maskable-512.png      512 px maskable application icon
+    │   └── fabgui.svg                  Translucent graphite FabGUI icon source
+    └── liquidGL/
+        ├── LICENSE                     LiquidGL's MIT license
+        ├── fabgui-glass.js              Shared WebGL 2 shaders and optical passes
+        └── glass-scene.js               Viewport geometry, backdrop, video and invalidation
+```
 
-## Live install (`~/.local/share/fabgui/`) — what actually runs on port 8000
-- Identical to project `static/` + `server.py` + `settings.json` + `backgrounds/` (kept in sync after each change).
-- Running as `fabgui.service` (systemd user unit), serves http://127.0.0.1:8000.
+The installed service reads `server.py`, `static/`, `settings.json`, and the
+optional `user-video.mp4` from `~/.local/share/fabgui`.

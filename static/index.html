@@ -3,20 +3,21 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#34373d">
+  <meta name="theme-color" content="#23262e">
   <title>FabGUI - Fab / Epic Games asset downloader</title>
-  <link rel="stylesheet" href="/static/style.css?v=glass-9">
-  <link rel="stylesheet" href="/static/appearance.css?v=glass-9">
-  <link rel="icon" href="/static/fab.jpeg">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/appearance.css">
+  <link rel="icon" href="/static/icons/fabgui.svg" type="image/svg+xml">
   <link rel="manifest" href="/static/manifest.json">
   <style>
-    header.top { position: sticky; top: 0; z-index: 200; display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); align-items: center; }
-    .header-sort-tabs { grid-column: 2; display: flex; justify-content: center; gap: 6px; padding: 2px; }
+    header.top { position: sticky; top: 0; z-index: 200; display: grid; align-items: center; }
+    @media (min-width: 861px) { header.top { grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); } }
+    .header-sort-tabs { display: flex; justify-content: center; gap: 6px; padding: 2px; }
     .sort-tab { white-space: nowrap; border-radius: 999px; padding: 6px 12px; }
     .sort-tab[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
-    .header-actions { grid-column: 3; justify-self: end; display: flex; align-items: center; gap: 10px; }
+    .header-actions { justify-self: end; display: flex; align-items: center; gap: 10px; }
     .header-actions .save-location { margin-left: 0; }
-    .library-tools { margin: -1px 0 14px; padding: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+    .library-tools { margin: -1px 0 14px; padding: 12px; }
     .library-tool-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
     .library-filters { display: flex; flex: 1; flex-wrap: wrap; gap: 8px; align-items: center; }
     .library-filters .input { min-width: 130px; max-width: 220px; padding: 7px 9px; }
@@ -32,8 +33,10 @@
 </head>
 <body>
   <div class="background-stage" aria-hidden="true">
-  <img id="wallpaperImage" class="background-wallpaper" alt="" aria-hidden="true">
-  <svg class="background-lines" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+  <canvas id="glassViewport"></canvas>
+  <img id="wallpaperImage" alt="" hidden>
+  <video id="videoWallpaper" muted playsinline preload="auto" hidden></video>
+  <svg id="lineArtwork" viewBox="0 0 1600 1000" hidden focusable="false">
     <path class="line line-a" d="M-120 200 C220 60 430 340 720 210 S1180 70 1720 240" style="--ls:26s;--lc:14s;--op:0.65;--sw:1.0" />
     <path class="line line-b" d="M-140 320 C260 140 470 490 790 310 S1260 130 1780 350" style="--ls:34s;--lc:16s;--op:0.5;--sw:1.2;animation-direction:reverse" />
     <path class="line line-c" d="M-100 450 C300 270 520 620 860 440 S1320 260 1740 510" style="--ls:30s;--lc:15s;--op:0.6;--sw:0.9;animation-delay:3s" />
@@ -43,10 +46,9 @@
     <path class="line line-g" d="M-90 260 C200 100 380 380 660 250 S1100 90 1660 270" style="--ls:28s;--lc:14s;--op:0.58;--sw:0.8;animation-delay:15s" />
     <path class="line line-h" d="M-110 500 C280 300 500 660 820 480 S1300 280 1780 540" style="--ls:42s;--lc:20s;--op:0.48;--sw:1.0;animation-direction:reverse;animation-delay:18s" />
   </svg>
-  <div class="background-scrim" aria-hidden="true"></div>
   </div>
   <header class="top">
-    <div class="brand"><img src="/static/fab.jpeg" class="brand-img" alt="">Fab<em>GUI</em></div>
+    <div class="brand"><img src="/static/icons/fabgui.svg" class="brand-img" alt="">Fab<em>GUI</em></div>
     <nav class="header-sort-tabs" role="group" aria-label="Sort owned library">
       <button class="btn sort-tab" data-sort="latest" aria-pressed="true">Latest engine</button>
       <button class="btn sort-tab" data-sort="title" aria-pressed="false">A-Z</button>
@@ -56,46 +58,77 @@
       <details class="appearance-menu" id="appearanceMenu">
         <summary class="btn ghost" aria-label="Appearance settings">Appearance</summary>
         <section class="appearance-popover" aria-label="Appearance settings">
-          <h2>Liquid glass</h2>
-          <p class="appearance-description">One frost setting controls every glass surface: header, cards, panels, menus and dialogs. Your choices stay in this browser.</p>
-
-          <label class="appearance-check"><input id="wallpaperEnabled" type="checkbox" checked> Animate the line background</label>
-          <div class="appearance-status" id="wallpaperStatus" role="status">Slow flowing glass lines</div>
-
-          <div class="appearance-kind" role="radiogroup" aria-label="Background">
-            <label><input type="radio" name="wallpaperKind" value="lines" checked> Lines</label>
-            <label><input type="radio" name="wallpaperKind" value="video"> Video</label>
-            <label><input type="radio" name="wallpaperKind" value="dark-bg"> Dark wallpaper</label>
-            <label><input type="radio" name="wallpaperKind" value="light-bg"> Light wallpaper</label>
+          <div class="appearance-heading">
+            <h2>Appearance</h2>
+            <p id="glassUnavailable" class="appearance-hint" role="status">Optical rendering requires WebGL 2. Check the browser’s graphics settings.</p>
+            <div class="appearance-tabs" role="tablist" aria-label="Appearance sections">
+              <button id="backgroundTab" type="button" role="tab" aria-selected="true" aria-controls="backgroundSection">Background</button>
+              <button id="glassTab" type="button" role="tab" aria-selected="false" aria-controls="glassSection" tabindex="-1">Glass</button>
+              <button id="motionTab" type="button" role="tab" aria-selected="false" aria-controls="motionSection" tabindex="-1">Motion</button>
+              <button id="presetsTab" type="button" role="tab" aria-selected="false" aria-controls="presetsSection" tabindex="-1">Presets</button>
+            </div>
           </div>
-          <div class="appearance-video">
-            <input id="videoFile" type="file" accept="video/*"> Use your own video as background
-            <button id="removeVideo" class="btn small" type="button">Remove video</button>
+          <div class="appearance-scroll">
+            <div id="backgroundSection" role="tabpanel" aria-labelledby="backgroundTab">
+              <fieldset class="appearance-wallpapers">
+                <legend>Wallpaper</legend>
+                <div class="appearance-kind">
+                  <label><input type="radio" name="wallpaperKind" value="lines" checked> Lines</label>
+                  <label><input type="radio" name="wallpaperKind" value="video"> Video</label>
+                  <label><input type="radio" name="wallpaperKind" value="dark-bg"> Gold-Gate Dark</label>
+                  <label><input type="radio" name="wallpaperKind" value="light-bg"> Gold-Gate Light</label>
+                  <label><input type="radio" name="wallpaperKind" value="anniversary"> 40th Anniversary</label>
+                </div>
+              </fieldset>
+              <p id="wallpaperStatus" class="appearance-status" role="status"></p>
+              <div id="videoSettings" class="appearance-video" hidden>
+                <button id="chooseVideo" class="btn small" type="button">Choose video…</button>
+                <input id="videoFile" type="file" accept="video/*" hidden>
+                <p class="appearance-hint">Saved locally as a muted MP4.</p>
+                <div id="videoPlayback" hidden>
+                  <div class="appearance-actions">
+                    <label class="appearance-check"><input id="videoPlay" type="checkbox" checked> Play video</label>
+                    <label class="appearance-check"><input id="videoLoop" type="checkbox" checked> Loop</label>
+                  </div>
+                  <div id="videoEffects"></div>
+                  <div class="appearance-actions">
+                    <button id="restartVideo" class="btn small" type="button">Restart</button>
+                    <button id="removeVideo" class="btn small" type="button">Remove video</button>
+                  </div>
+                </div>
+              </div>
+              <h3>Background Effects</h3>
+              <div id="backgroundEffects"></div>
+            </div>
+            <div id="glassSection" role="tabpanel" aria-labelledby="glassTab" hidden>
+              <h3>Glass Optics</h3>
+              <div id="glassOptics"></div>
+            </div>
+            <div id="motionSection" role="tabpanel" aria-labelledby="motionTab" hidden>
+              <h3>Motion</h3>
+              <label class="appearance-check"><input id="wallpaperEnabled" type="checkbox" checked> Animate the line background</label>
+              <label class="appearance-check"><input id="effectsMotion" type="checkbox" checked> Animate aurora, particles and caustics</label>
+              <div id="motionEffects"></div>
+            </div>
+            <div id="presetsSection" role="tabpanel" aria-labelledby="presetsTab" hidden>
+              <h3>Presets</h3>
+              <label class="appearance-range-label" for="appearancePresets">Load an appearance preset</label>
+              <select id="appearancePresets" class="input"></select>
+              <form id="saveAppearancePreset" class="appearance-actions">
+                <input id="appearancePresetName" class="input" type="text" maxlength="48" placeholder="Preset name" aria-label="Custom preset name" required>
+                <button class="btn small" type="submit">Save custom preset</button>
+              </form>
+              <div class="appearance-actions">
+                <button id="resetAppearance" class="btn small" type="button">Reset to defaults</button>
+                <button id="restoreAppearance" class="btn small" type="button">Restore saved appearance</button>
+              </div>
+              <p id="appearanceFeedback" class="appearance-status" role="status"></p>
+            </div>
           </div>
-          <p class="appearance-hint">Videos are converted to silent MP4 with ffmpeg and saved on the server, so the choice survives a reload.</p>
-
-          <label class="appearance-range-label" for="glassFrost"><span>Glass frost (all glass)</span><output id="glassFrostValue">0.0</output></label>
-          <input id="glassFrost" class="appearance-range" type="range" min="0" max="8" step="0.1" value="0">
-          <p class="appearance-hint">0 = crystal clear. This single value drives the frost on every glass surface.</p>
-
-          <label class="appearance-range-label" for="glassTint"><span>Glass tint</span><output id="glassTintValue">24%</output></label>
-          <input id="glassTint" class="appearance-range" type="range" min="0" max="75" step="1" value="24">
-          <p class="appearance-hint">Higher tint strength means less transparent glass. The tint stays neutral grey.</p>
-
-          <label class="appearance-range-label" for="glassIndex"><span>Refraction index</span><output id="glassIndexValue">1.35</output></label>
-          <input id="glassIndex" class="appearance-range" type="range" min="1.0" max="2.5" step="0.01" value="1.35">
-          <label class="appearance-range-label" for="glassStrength"><span>Refraction strength</span><output id="glassStrengthValue">30%</output></label>
-          <input id="glassStrength" class="appearance-range" type="range" min="0" max="1" step="0.01" value="0.30">
-          <label class="appearance-range-label" for="glassBevel"><span>Edge bevel width</span><output id="glassBevelValue">18%</output></label>
-          <input id="glassBevel" class="appearance-range" type="range" min="0.05" max="0.4" step="0.01" value="0.18">
-          <p class="appearance-hint">Index bends light at the glass edge; strength controls the overall lens offset; bevel width sets how wide the bright edge is.</p>
-
-          <label class="appearance-range-label" for="wallpaperDim"><span>Background dimming</span><output id="wallpaperDimValue">24%</output></label>
-          <input id="wallpaperDim" class="appearance-range" type="range" min="0" max="70" step="1" value="24">
-          <button id="resetAppearance" class="btn small" type="button">Reset appearance</button>
         </section>
       </details>
       <button id="btnHelp" class="btn ghost">Help</button>
+      <button id="installApp" class="btn ghost" type="button" hidden>Install FabGUI</button>
     </div>
   </header>
   <main>
@@ -190,10 +223,10 @@
       <div class="modal-actions"><button id="helpModalClose" class="btn primary">Got it</button></div>
     </div>
   </div>
-  <div id="toast" class="toast"></div>
-  <script src="/static/app.js?v=glass-9"></script>
-  <script src="/static/engine-sort.js?v=glass-9"></script>
-  <script src="/static/liquidGL/liquidGL.js?v=glass-9"></script>
-  <script type="module" src="/static/appearance.js?v=glass-9"></script>
+  <div id="toast" class="toast" role="status" hidden><span id="toastMessage"></span></div>
+  <script src="/static/app.js"></script>
+  <script src="/static/engine-sort.js"></script>
+  <script type="module" src="/static/appearance.js"></script>
+  <script type="module" src="/static/install-app.js"></script>
 </body>
 </html>

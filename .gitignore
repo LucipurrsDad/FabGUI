@@ -4,4 +4,8 @@ __pycache__/
 *.so
 *.tar.zst
 settings.json
+/user-video.mp4
+/.upload-*
+/.user-video-*.mp4
+/static/backgrounds/user-video*.mp4
 .DS_Store

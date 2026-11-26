@@ -1,9 +1,9 @@
 # liquidGL integration notice
 
-FabGUI vendors the `liquidGL` v3.0.0 browser script in `static/liquidGL/`.
-liquidGL is © NaughtyDuk and is licensed under the MIT License; see
-`static/liquidGL/LICENSE` for the license terms.
+FabGUI's WebGL 2 shader adapts the rounded-rectangle bevel profile,
+refraction sampling and dispersion of NaughtyDuk's liquidGL v3.0.0
+(https://github.com/naughtyduk/liquidGL), used under the MIT License.
+See static/liquidGL/LICENSE.
 
-FabGUI uses liquidGL to render the header and asset cards as refracting glass
-panes. The remaining glass surfaces use the same tint and frost variables as a
-CSS fallback. FabGUI does not copy or redistribute liquidGL's demo media.
+FabGUI applies the adapted optics to its own fixed wallpaper texture using
+Snell's law and viewport-relative CSS pixel geometry.

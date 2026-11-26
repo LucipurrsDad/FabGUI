@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>FabGUI — Liquid Glass Showcase</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #080d1a; }
+  body { font: 19px system-ui, sans-serif; color: #f5f8ff; }
+  #stage { position: absolute; left: 50%; top: 50%; width: 1200px; height: 675px; transform-origin: center; }
+  canvas, header, main, aside, footer { position: absolute; }
+  canvas { inset: 0; }
+  header { inset: 42px 57px auto; display: flex; align-items: center; justify-content: space-between; }
+  .brand { display: flex; align-items: center; gap: 10px; font-size: 26px; font-weight: 740; letter-spacing: -.04em; }
+  .brand img { width: 44px; height: 44px; }
+  .label { color: #c5d5ee; font-size: 14px; font-weight: 650; letter-spacing: .19em; text-transform: uppercase; }
+  main, aside { border: 1px solid #d2e6ff62; box-shadow: 0 18px 57px #04081870; text-shadow: 0 2px 12px #030617; }
+  main { left: 216px; top: 167px; width: 768px; height: 329px; border-radius: 53px; padding: 43px 53px; }
+  h1 { margin: 7px 0 5px; font-size: 75px; font-weight: 750; letter-spacing: -.07em; line-height: 1.03; }
+  p { margin: 0; color: #edf4ff; font-size: 22px; }
+  dl { display: flex; gap: 10px; margin: 23px 0 0; }
+  dl div { min-width: 126px; padding: 8px 11px; border-radius: 10px; background: #091324b5; border: 1px solid #bfd8ff47; }
+  dt { color: #c7d6eb; font-size: 11px; text-transform: uppercase; letter-spacing: .12em; }
+  dd { margin: 1px 0 0; font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  aside { left: 357px; top: 523px; width: 486px; height: 56px; border-radius: 28px; }
+  ol { display: flex; margin: 0; padding: 5px 7px; list-style: none; text-align: center; }
+  li { flex: 1; padding: 10px; border-radius: 23px; font-size: 16px; font-weight: 650; color: #d5e1f5; }
+  li[aria-current="step"] { background: #b9dfff38; color: white; }
+  footer { inset: auto 57px 37px; display: flex; justify-content: space-between; align-items: center; gap: 24px; text-shadow: 0 1px 8px #060d1e; }
+  .track { flex: 1; height: 3px; border-radius: 6px; background: #d4e2ff42; }
+  .track span { display: block; width: 100%; height: 100%; border-radius: inherit; background: #b9eaff; transform-origin: left; }
+</style>
+<div id="stage">
+  <canvas id="viewport" aria-hidden="true"></canvas>
+  <header>
+    <div class="brand"><img src="../../static/icons/fabgui.svg" alt=""> FabGUI</div>
+    <div class="label">Liquid glass showcase</div>
+  </header>
+  <main>
+    <div id="index" class="label">01 / 03 · Glass optics</div>
+    <h1 id="mode">Crystal</h1>
+    <p id="description">Clear glass with a precise, polished edge.</p>
+    <dl>
+      <div><dt>Refractive index</dt><dd id="ior">1.48</dd></div>
+      <div><dt>Frost</dt><dd id="frost">0.7 px</dd></div>
+      <div><dt>Dispersion</dt><dd id="dispersion">18%</dd></div>
+    </dl>
+  </main>
+  <aside aria-label="Showcase modes">
+    <ol><li aria-current="step">Crystal</li><li>Prism</li><li>Aurora</li></ol>
+  </aside>
+  <footer class="label">
+    <span>Production WebGL optics</span><div class="track" aria-hidden="true"><span></span></div><span>10 second loop</span>
+  </footer>
+</div>
+<script type="module">
+  import { LiquidGlass } from "../../static/liquidGL/fabgui-glass.js";
+
+  const width = 1200;
+  const height = 675;
+  const duration = 10000;
+  const backdrop = new OffscreenCanvas(width, height);
+  const ctx = backdrop.getContext("2d", { alpha: false });
+  const renderer = new LiquidGlass(new OffscreenCanvas(1, 1), document.querySelector("#viewport").getContext("bitmaprenderer"));
+  renderer.resize(width, height, 1);
+  const lenses = [[216, 167, 768, 329, 53], [357, 523, 486, 56, 28]];
+  const modes = [
+    {
+      title: "Crystal",
+      description: "Clear glass with a precise, polished edge.",
+      optics: { tint: 25, refractionIndex: 1.48, refractionStrength: .75, thickness: 30, curvature: .42,
+        bevelWidth: .20, dispersion: .18, glassFrost: .7, specular: .85, caustics: .16, colorBleed: .15,
+        aurora: 0, bloom: .12, particles: 0 },
+      hue: 210,
+    },
+    {
+      title: "Prism",
+      description: "Deep bevels split light into colored fringes.",
+      optics: { tint: 27, refractionIndex: 1.83, refractionStrength: .98, thickness: 46, curvature: .86,
+        bevelWidth: .31, dispersion: .86, glassFrost: 1.4, specular: 1, caustics: .53, colorBleed: .35,
+        aurora: 0, bloom: .40, particles: 0 },
+      hue: 278,
+    },
+    {
+      title: "Aurora",
+      description: "Soft frost, color bleed, and a sky in motion.",
+      optics: { tint: 22, refractionIndex: 1.62, refractionStrength: .90, thickness: 37, curvature: .57,
+        bevelWidth: .25, dispersion: .46, glassFrost: 4.2, specular: .9, caustics: .65, colorBleed: .70,
+        aurora: .79, bloom: .56, particles: .51 },
+      hue: 179,
+    },
+  ];
+  const byId = (id) => document.getElementById(id);
+  const stage = byId("stage");
+  const indicators = [...document.querySelectorAll("li")];
+  const marker = document.querySelector(".track span");
+  let shownMode = -1;
+
+  function fit() {
+    stage.style.transform = `translate(-50%, -50%) scale(${Math.min(innerWidth / width, innerHeight / height)})`;
+  }
+  window.addEventListener("resize", fit);
+  fit();
+
+  function light(x, y, radius, color) {
+    const glow = ctx.createRadialGradient(x, y, 0, x, y, radius);
+    glow.addColorStop(0, color);
+    glow.addColorStop(1, "transparent");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, width, height);
+  }
+
+  function drawBackdrop(angle, hue) {
+    const x = Math.cos(angle);
+    const y = Math.sin(angle);
+    ctx.fillStyle = "#080d1a";
+    ctx.fillRect(0, 0, width, height);
+    light(354 + 95 * x, 408 + 70 * y, 530, `hsl(${hue + 37} 67% 25%)`);
+    light(915 - 96 * y, 208 + 65 * x, 480, `hsl(${hue - 28} 62% 28%)`);
+    light(700 + 64 * y, 565, 365, `hsl(${hue + 93} 57% 26%)`);
+
+    // Bright, thin contours cross both panes so the refracted offsets are visible.
+    const ribbon = ctx.createLinearGradient(0, 550, width, 105);
+    ribbon.addColorStop(0, `hsl(${hue + 12} 92% 64%)`);
+    ribbon.addColorStop(.38, `hsl(${hue + 72} 92% 77%)`);
+    ribbon.addColorStop(.68, `hsl(${hue - 56} 91% 81%)`);
+    ribbon.addColorStop(1, `hsl(${hue - 26} 86% 57%)`);
+    ctx.strokeStyle = ribbon;
+    for (let i = -13; i <= 13; i++) {
+      const offset = i * 14;
+      const flow = Math.sin(angle + i * .12);
+      ctx.globalAlpha = (i % 4 === 0 ? .92 : .56) * (1 - Math.abs(i) * .029);
+      ctx.lineWidth = i % 4 === 0 ? 2.8 : 1.35;
+      ctx.beginPath();
+      ctx.moveTo(-36, 504 + offset + 36 * flow);
+      ctx.bezierCurveTo(192 + 53 * x, 601 + offset, 326, 89 + offset + 81 * flow, 566, 290 + offset);
+      ctx.bezierCurveTo(810, 501 + offset - 112 * flow, 943 + 47 * y, 93 + offset, 1240, 158 + offset + 36 * flow);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  window.drawShowcaseFrame = (milliseconds) => {
+    const progress = (milliseconds % duration) / duration;
+    const step = progress * modes.length;
+    const current = Math.floor(step);
+    const next = (current + 1) % modes.length;
+    const fade = Math.max(0, (step - current - .74) / .26);
+    const mix = fade * fade * (3 - 2 * fade);
+    const from = modes[current];
+    const to = modes[next];
+    const optics = Object.fromEntries(Object.entries(from.optics).map(([key, value]) => [
+      key, value + (to.optics[key] - value) * mix,
+    ]));
+    const angle = progress * Math.PI * 2;
+    const time = Math.sin(angle) * 3.4;
+    drawBackdrop(angle, from.hue + (to.hue - from.hue) * mix);
+    renderer.upload(backdrop, width, height);
+    renderer.compose({ ...optics, dim: .07, grain: 0, vignette: .4 }, true, time, 0);
+    renderer.paint(optics, lenses, [], time);
+
+    const active = mix < .5 ? current : next;
+    if (shownMode !== active) {
+      shownMode = active;
+      byId("index").textContent = `0${active + 1} / 03 · Glass optics`;
+      byId("mode").textContent = modes[active].title;
+      byId("description").textContent = modes[active].description;
+      indicators.forEach((item, index) => {
+        if (index === active) item.setAttribute("aria-current", "step");
+        else item.removeAttribute("aria-current");
+      });
+    }
+    byId("ior").textContent = optics.refractionIndex.toFixed(2);
+    byId("frost").textContent = `${optics.glassFrost.toFixed(1)} px`;
+    byId("dispersion").textContent = `${Math.round(optics.dispersion * 100)}%`;
+    marker.style.transform = `scaleX(${progress})`;
+  };
+
+  window.drawShowcaseFrame(0);
+</script>
+</html>

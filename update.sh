@@ -34,6 +34,9 @@ if [[ ! -f "$SOURCE_DIR/server.py" || ! -d "$SOURCE_DIR/static" ]]; then
 fi
 
 mkdir -p "$INSTALL_DIR"
+if [[ -f "$INSTALL_DIR/static/backgrounds/user-video.mp4" && ! -e "$INSTALL_DIR/user-video.mp4" ]]; then
+  mv "$INSTALL_DIR/static/backgrounds/user-video.mp4" "$INSTALL_DIR/user-video.mp4"
+fi
 install -m 755 "$SOURCE_DIR/server.py" "$INSTALL_DIR/server.py"
 # Replace frontend assets to remove obsolete files while leaving user settings intact.
 rm -rf "$INSTALL_DIR/static"

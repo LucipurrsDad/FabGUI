@@ -138,9 +138,7 @@ function plainText(value) {
 const jobWatchers = {};
 
 function closeEventSource(jobId) {
-  if (jobWatchers[jobId]?.eventSource) {
-    jobWatchers[jobId].eventSource.close();
-  }
+  jobWatchers[jobId]?.eventSource?.close();
 }
 
 function watchJob(jobId, onSuccess, onError) {
@@ -153,9 +151,11 @@ function watchJob(jobId, onSuccess, onError) {
       const job = await api(`/api/jobs/${jobId}`);
       if (job.state === "success") {
         alive = false; clearTimeout(timer); closeEventSource(jobId);
+        delete jobWatchers[jobId];
         if (onSuccess) onSuccess(job.result);
       } else if (job.state === "error") {
         alive = false; clearTimeout(timer); closeEventSource(jobId);
+        delete jobWatchers[jobId];
         if (onError) onError(job.result || job.error);
       } else {
         timer = setTimeout(tick, 2000);
@@ -173,7 +173,11 @@ function openEventSource(jobId, onProgress) {
   const eventSource = new EventSource(`/api/jobs/${jobId}/progress`);
   if (jobWatchers[jobId]) jobWatchers[jobId].eventSource = eventSource;
   const handler = (event) => {
-    try { if (onProgress) onProgress(JSON.parse(event.data)); } catch (error) {}
+    try {
+      const progress = JSON.parse(event.data);
+      if (progress.state === "success" || progress.state === "error") eventSource.close();
+      else onProgress?.(progress);
+    } catch (error) {}
   };
   eventSource.onmessage = handler;
   eventSource.addEventListener("progress", handler);
@@ -360,29 +364,14 @@ async function confirmDownload() {
     const jobId = response.job_id;
     if (!jobId) return;
     addJobRow(jobId, pending.title || pending.uid, engine, platform);
-    openEventSource(jobId, (progress) => updateJobProgress(jobId, progress));
     watchJob(jobId, (result) => {
-      const row = document.getElementById("job-" + jobId);
-      if (row) {
-        const statusCell = row.querySelector(".job-status");
-        const bar = row.querySelector(".progress-bar > div");
-        if (bar) bar.style.width = "100%";
-        if (statusCell) {
-          statusCell.textContent = result.ok ? "Done!" : "Failed";
-          statusCell.className = "job-status " + (result.ok ? "success" : "error");
-        }
-      }
+      finishDownloadRow(jobId, result.ok);
       if (!result.ok) toast("Download failed: " + (result.message || "unknown"), "error");
-      refreshDownloadsDock();
     }, (error) => {
-      const row = document.getElementById("job-" + jobId);
-      if (row) {
-        const statusCell = row.querySelector(".job-status");
-        if (statusCell) { statusCell.textContent = "Failed"; statusCell.className = "job-status error"; }
-      }
+      finishDownloadRow(jobId, false);
       toast("Download failed: " + (error.message || "unknown"), "error");
-      refreshDownloadsDock();
     });
+    openEventSource(jobId, (progress) => updateJobProgress(jobId, progress));
   } catch (error) {
     toast("Download failed: " + error.message, "error");
   } finally {
@@ -391,12 +380,30 @@ async function confirmDownload() {
 }
 
 const jobProgress = {};
+let downloadDockTimeout;
+
+function finishDownloadRow(jobId, ok) {
+  delete jobProgress[jobId];
+  const row = document.getElementById("job-" + jobId);
+  if (!row) return;
+  const status = row.querySelector(".job-status");
+  status.textContent = ok ? "Done!" : "Failed";
+  status.className = `job-status ${ok ? "success" : "error"}`;
+  row.querySelector(".spinner").style.display = "none";
+  if (ok) {
+    row.querySelector(".progress-bar > div").style.width = "100%";
+    row.querySelector(".job-progress span").textContent = "100%";
+  }
+  refreshDownloadsDock();
+}
 
 function refreshDownloadsDock() {
-  const panel = document.getElementById("downloadsPanel");
-  if (!panel) return;
-  const running = [...document.querySelectorAll("#jobsBody .job-status.running")].length > 0;
-  document.body.classList.toggle("downloads-active", running);
+  clearTimeout(downloadDockTimeout);
+  if (document.querySelector("#jobsBody .job-status.running")) {
+    document.body.classList.add("downloads-active");
+  } else {
+    downloadDockTimeout = setTimeout(() => document.body.classList.remove("downloads-active"), 10000);
+  }
 }
 
 function addJobRow(jobId, title, engine, platform) {
@@ -508,64 +515,31 @@ async function refreshAuthTab() {
   $("#whoEmail").textContent = who.email || "—";
 }
 
-/* Toast notification with optional spinner. Kind: info | success | error.
-   When kind is "loading" it shows a spinning wheel; on success it shows a
-   green check mark with "Done!". */
-function toast(msg, kind, anchorEl) {
+const toastIcons = {
+  loading: '<svg width="16" height="16" viewBox="0 0 24 24" style="animation:spin 1s linear infinite"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"/></svg>',
+  success: '<svg width="16" height="16" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>',
+  error: '<svg width="16" height="16" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>',
+};
+
+function toast(msg, kind = "info") {
   const t = $("#toast");
-  if (!t) return;
-  const isLoading = kind === "loading";
-  const isSuccess = kind === "success";
-  t.textContent = "";
-  const icon = document.createElement("span");
-  icon.style.marginRight = "8px";
-  icon.style.fontSize = "14px";
-  if (isLoading) {
-    icon.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" style="display:inline-block;animation:rotate 1s linear infinite"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"/></svg>';
-    t.textContent = msg;
-    t.prepend(icon);
-    t.className = "toast loading show";
-    t.style.opacity = "1";
-    t.style.visibility = "visible";
-    t.style.display = "";
-    t.style.transform = "";
-    t.style.transition = "";
-    t.style.position = "fixed";
-    t.style.left = "50%";
-    t.style.bottom = "22px";
-    t.style.top = "auto";
-    t.style.transform = "translateX(-50%)";
-    clearTimeout(toast._timer);
-    return;
+  const message = $("#toastMessage");
+  if (!t || !message) return;
+  message.textContent = msg;
+  if (Object.hasOwn(toastIcons, kind)) {
+    const icon = document.createElement("span");
+    icon.className = "toast-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.innerHTML = toastIcons[kind];
+    message.prepend(icon);
   }
-  if (isSuccess) {
-    icon.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" style="display:inline-block"><polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-    t.textContent = msg;
-    t.prepend(icon);
-    t.className = "toast success show";
-  } else if (kind === "error") {
-    icon.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" style="display:inline-block"><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>';
-    t.textContent = msg;
-    t.prepend(icon);
-    t.className = "toast error show";
-  } else {
-    t.textContent = msg;
-    t.className = "toast info show";
-  }
-  t.style.opacity = "1";
-  t.style.visibility = "visible";
-  t.style.display = "";
-  t.style.transform = "";
-  t.style.transition = "";
-  t.style.position = "fixed";
-  t.style.left = "50%";
-  t.style.bottom = "22px";
-  t.style.top = "auto";
-  t.style.transform = "translateX(-50%)";
+  t.className = `toast ${kind} show`;
+  t.hidden = false;
   clearTimeout(toast._timer);
-  if (kind !== "error") {
-    toast._timer = setTimeout(() => { t.classList.remove("show"); }, 10000);
-  }
+  toast._timer = setTimeout(() => {
+    t.hidden = true;
+    t.classList.remove("show");
+  }, 8000);
 }
 
 async function startLogin() {
