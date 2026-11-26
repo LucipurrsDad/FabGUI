@@ -9,7 +9,7 @@ cd FabGUI
 ./install.sh
 ```
 
-A self-hosted web app for [FabCLI](https://github.com/zirklerite/FabCLI), the Epic Games / Fab asset download tool for Linux. FabGUI turns your owned Fab library into a searchable, sortable visual catalog with apple refinement. Includes direct download and authentication controls.
+A self-hosted web app for [FabCLI](https://github.com/zirklerite/FabCLI), the Epic Games / Fab asset download tool for Linux. FabGUI turns your owned Fab library into a searchable, sortable visual catalog with Apple-grade refinement. Includes direct download and authentication controls.
 
 ## Features
 
