@@ -357,7 +357,6 @@ async function confirmDownload() {
       toast("Download failed: " + (response.message || "unknown"), "error");
       return;
     }
-    toast("Download started…", "loading");
     const jobId = response.job_id;
     if (!jobId) return;
     addJobRow(jobId, pending.title || pending.uid, engine, platform);
@@ -373,8 +372,8 @@ async function confirmDownload() {
           statusCell.className = "job-status " + (result.ok ? "success" : "error");
         }
       }
-      if (result.ok) toast(`Download complete: ${result.data.files} files, ${fmtBytes(result.data.total_bytes)}`, "success");
-      else toast("Download failed: " + (result.message || "unknown"), "error");
+      if (!result.ok) toast("Download failed: " + (result.message || "unknown"), "error");
+      refreshDownloadsDock();
     }, (error) => {
       const row = document.getElementById("job-" + jobId);
       if (row) {
@@ -382,6 +381,7 @@ async function confirmDownload() {
         if (statusCell) { statusCell.textContent = "Failed"; statusCell.className = "job-status error"; }
       }
       toast("Download failed: " + (error.message || "unknown"), "error");
+      refreshDownloadsDock();
     });
   } catch (error) {
     toast("Download failed: " + error.message, "error");
@@ -391,6 +391,13 @@ async function confirmDownload() {
 }
 
 const jobProgress = {};
+
+function refreshDownloadsDock() {
+  const panel = document.getElementById("downloadsPanel");
+  if (!panel) return;
+  const running = [...document.querySelectorAll("#jobsBody .job-status.running")].length > 0;
+  document.body.classList.toggle("downloads-active", running);
+}
 
 function addJobRow(jobId, title, engine, platform) {
   const body = $("#jobsBody");
@@ -406,6 +413,7 @@ function addJobRow(jobId, title, engine, platform) {
     <td class="job-progress"><div class="progress-bar"><div></div></div><span style="font-size:0.8em;color:#aaa">0%</span></td>
   `;
   body.appendChild(row);
+  refreshDownloadsDock();
 }
 
 function updateJobProgress(jobId, progress) {

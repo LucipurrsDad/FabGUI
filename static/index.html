@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#34373d">
   <title>FabGUI - Fab / Epic Games asset downloader</title>
-  <link rel="stylesheet" href="/static/style.css?v=glass-5">
-  <link rel="stylesheet" href="/static/appearance.css?v=glass-5">
+  <link rel="stylesheet" href="/static/style.css?v=glass-9">
+  <link rel="stylesheet" href="/static/appearance.css?v=glass-9">
   <link rel="icon" href="/static/fab.jpeg">
   <link rel="manifest" href="/static/manifest.json">
   <style>
@@ -32,6 +32,7 @@
 </head>
 <body>
   <div class="background-stage" aria-hidden="true">
+  <img id="wallpaperImage" class="background-wallpaper" alt="" aria-hidden="true">
   <svg class="background-lines" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
     <path class="line line-a" d="M-120 200 C220 60 430 340 720 210 S1180 70 1720 240" style="--ls:26s;--lc:14s;--op:0.65;--sw:1.0" />
     <path class="line line-b" d="M-140 320 C260 140 470 490 790 310 S1260 130 1780 350" style="--ls:34s;--lc:16s;--op:0.5;--sw:1.2;animation-direction:reverse" />
@@ -100,7 +101,7 @@
   <main>
     <section id="tab-search" class="tab-panel active">
       <div class="panel" id="libraryPanel">
-        <div class="library-tools" aria-label="Library search and filters">
+        <div class="library-tools" id="filterPanel" aria-label="Library search and filters">
           <div class="library-tool-row library-filters">
             <input id="librarySearch" class="input library-search" type="search" placeholder="Search titles, categories…" aria-label="Search owned assets">
             <select id="engineFilter" class="input" aria-label="Filter by Unreal Engine version up to the selected version"><option value="">Any engine</option></select>
@@ -117,7 +118,7 @@
           <div id="resultsGrid" class="hidden results-grid"></div>
         </div>
 
-        <div class="library-tools" aria-label="Download progress" style="margin-top:14px;">
+        <div class="library-tools" id="downloadsPanel" aria-label="Download progress" style="margin-top:14px;">
           <div class="library-tool-row library-filters">
             <h3 style="margin:0;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;">Downloads</h3>
             <div class="table-wrap" style="margin-top:8px;max-height:220px;overflow-y:auto;">
@@ -190,9 +191,9 @@
     </div>
   </div>
   <div id="toast" class="toast"></div>
-  <script src="/static/app.js?v=glass-5"></script>
-  <script src="/static/engine-sort.js?v=glass-5"></script>
-  <script src="/static/liquidGL/liquidGL.js?v=glass-5"></script>
-  <script type="module" src="/static/appearance.js?v=glass-5"></script>
+  <script src="/static/app.js?v=glass-9"></script>
+  <script src="/static/engine-sort.js?v=glass-9"></script>
+  <script src="/static/liquidGL/liquidGL.js?v=glass-9"></script>
+  <script type="module" src="/static/appearance.js?v=glass-9"></script>
 </body>
 </html>

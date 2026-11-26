@@ -28,6 +28,7 @@ const CARD_ROOT_MARGIN = "320px";
 
 let settings = { ...DEFAULTS };
 let videoBg = null;
+let wallpaperImage = null;
 let glassReady = false;
 let glassId = 0;
 let cardObserver = null;
@@ -35,6 +36,7 @@ let bodyRenderer = null;
 let snapshotTimer = null;
 const allLenses = new Set();
 const cardLenses = new Map();
+const glassDebug = { entries: [], added: 0, removed: 0, errors: [] };
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -166,8 +168,19 @@ function updateBackground() {
   // The wallpaper lives on the fixed stage, not <body>, so liquidGL can
   // capture it. Capturing <body> previously pulled in every card and produced
   // a 37,000px-tall texture that lost the WebGL context.
-  if (stage) {
-    stage.style.backgroundImage = WALLPAPERS[kind] ? `url('${WALLPAPERS[kind]}')` : "";
+  // The wallpaper is a real <img> inside the fixed stage. liquidGL's DOM
+  // rasteriser can draw an already-decoded <img> synchronously, while a CSS
+  // background-image could be skipped when the capture raced the image load.
+  if (stage) stage.style.backgroundImage = "";
+  if (wallpaperImage) {
+    const source = WALLPAPERS[kind] || "";
+    if (source) {
+      if (wallpaperImage.getAttribute("src") !== source) wallpaperImage.src = source;
+      wallpaperImage.classList.add("active");
+    } else {
+      wallpaperImage.classList.remove("active");
+      wallpaperImage.removeAttribute("src");
+    }
   }
   body.style.removeProperty("--bg-image");
 
@@ -270,12 +283,13 @@ function initHeaderGlass() {
 }
 
 function initToolbarGlass() {
-  const tools = $(".library-tools");
+  const tools = $("#filterPanel");
   if (!tools || tools.dataset.fabguiGlass) return;
   tools.dataset.fabguiGlass = "toolbar";
-  // Both the filter bar and the downloads box share the body-level lens canvas
-  // with the cards, so all three use the same refraction and frost settings.
-  const lens = createLens(".library-tools", false);
+  // The filter bar and the cards share the body-level lens canvas. The
+  // downloads panel stays on CSS glass because it becomes position:fixed while
+  // a download is active, and liquidGL does not track fixed targets.
+  const lens = createLens("#filterPanel", false);
   const first = Array.isArray(lens) ? lens[0] : lens;
   if (first && first.renderer) bodyRenderer = first.renderer;
 }
@@ -286,8 +300,11 @@ function removeCardLens(card) {
     try { lens.destroy(); } catch (error) {}
     allLenses.delete(lens);
     cardLenses.delete(card);
+    glassDebug.removed++;
   }
-  if (cardObserver) cardObserver.unobserve(card);
+  // Keep observing the card. Unobserving here made every card that started
+  // off-screen permanent: it never received an entry when it later scrolled
+  // into view, so only the first viewport of cards ever got glass.
 }
 
 function addCardLens(card) {
@@ -305,11 +322,15 @@ function addCardLens(card) {
       lens = bodyRenderer.addLens(card, internalOptions(false));
       allLenses.add(lens);
     } catch (error) {
+      glassDebug.errors.push(`addLens: ${error.message}`);
       lens = null;
     }
   }
   if (!lens) lens = createLens(`[data-fabgui-glass-id="${card.dataset.fabguiGlassId}"]`, false);
-  if (lens) cardLenses.set(card, Array.isArray(lens) ? lens[0] : lens);
+  if (lens) {
+    cardLenses.set(card, Array.isArray(lens) ? lens[0] : lens);
+    glassDebug.added++;
+  }
 }
 
 function scanCards() {
@@ -329,9 +350,11 @@ function setupCardGlass() {
   if (!glassReady || typeof IntersectionObserver === "undefined") return;
   cardObserver = new IntersectionObserver((entries) => {
     entries.forEach((entry) => {
+      glassDebug.entries.push({ id: entry.target.dataset.fabguiGlassId, vis: entry.isIntersecting, ratio: Math.round(entry.intersectionRatio * 100) / 100, top: Math.round(entry.boundingClientRect.top) });
       if (entry.isIntersecting) addCardLens(entry.target);
       else removeCardLens(entry.target);
     });
+    glassDebug.entries = glassDebug.entries.slice(-120);
   }, { rootMargin: CARD_ROOT_MARGIN, threshold: 0.01 });
 
   scanCards();
@@ -472,6 +495,12 @@ function bindSettings() {
     const menu = $("#appearanceMenu");
     if (menu && menu.open && !menu.contains(event.target)) menu.open = false;
   });
+  const menu = $("#appearanceMenu");
+  if (menu) {
+    menu.addEventListener("toggle", () => {
+      document.body.classList.toggle("appearance-open", menu.open);
+    });
+  }
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
     const menu = $("#appearanceMenu");
@@ -482,6 +511,22 @@ function bindSettings() {
 function bootAppearance() {
   loadSettings();
   bindSettings();
+
+  // Small read-only diagnostics hook used by the appearance tests and the
+  // browser console. It never drives rendering.
+  window.__fabguiGlass = {
+    get renderer() { return bodyRenderer; },
+    get cards() { return cardLenses; },
+    get observer() { return cardObserver; },
+    get debug() { return glassDebug; },
+    addCardLens,
+    scanCards,
+  };
+
+  wallpaperImage = document.querySelector("#wallpaperImage");
+  if (wallpaperImage) {
+    wallpaperImage.addEventListener("load", () => refreshSnapshots(0));
+  }
 
   videoBg = document.createElement("video");
   videoBg.id = "videoWallpaper";
@@ -498,6 +543,7 @@ function bootAppearance() {
   videoBg.addEventListener("error", () => {
     setVideoStatus("Saved video could not be played. Upload it again.");
   });
+  videoBg.addEventListener("loadeddata", () => refreshSnapshots(0));
   const stage = document.querySelector(".background-stage");
   (stage || document.body).appendChild(videoBg);
 
