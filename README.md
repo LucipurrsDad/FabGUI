@@ -2,7 +2,7 @@
 <img width="3840" height="2160" alt="Screenshot_20261126_030158" src="https://github.com/user-attachments/assets/f52e16d5-d8d3-4936-bfd2-1851ffdeb57a" />
 <img width="3840" height="2160" alt="Screenshot_20261126_030433" src="https://github.com/user-attachments/assets/ff2c2258-0f5c-400e-b221-59b829dc13d7" />
 
-A self-hosted web app for [FabCLI](https://github.com/zirklerite/FabCLI), the Epic Games / Fab asset download tool for Linux. FabGUI turns your owned Fab library into a searchable, sortable visual catalog wuth apple refinement. Includes direct download and authentication controls.
+A self-hosted web app for [FabCLI](https://github.com/zirklerite/FabCLI), the Epic Games / Fab asset download tool for Linux. FabGUI turns your owned Fab library into a searchable, sortable visual catalog with apple refinement. Includes direct download and authentication controls.
 
 ## Features
 
