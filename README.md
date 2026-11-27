@@ -163,4 +163,4 @@ The WebGL 2 renderer adapts the optics from [NaughtyDuk's liquidGL](https://gith
 
 ## License
 
-MIT
+GPL-3.0
