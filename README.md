@@ -2,7 +2,6 @@
 
 Browse and download your owned Epic Games / Fab library on Linux. FabGUI pairs [FabCLI](https://github.com/zirklerite/FabCLI) with a searchable card grid, tunable optical glass, and an installable desktop window that launches from KDE Plasma.
 
-## 10-second liquid-glass showcase
 
 ![Ten-second loop showing Crystal, Prism and Aurora glass over moving colored contours](docs/demos/fabgui-showcase.webp)
 
